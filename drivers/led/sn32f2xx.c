@@ -375,7 +375,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         current_row = 0;
     }
 
-    // Tính current_row % 3 bằng nhân nghịch đảo (0 phép chia, 4 chu kỳ CPU)
+    // Fast current_row % 3 via reciprocal multiplication
     uint8_t row_ch = current_row - (uint8_t)(((uint16_t)(current_row * 86u) >> 8) * 3u);
 
 #    if defined(SHARED_MATRIX)
@@ -442,7 +442,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         // 2. Right strip (B9 - Channel 1): Col 16, Red & Green swapped
         RGB r_led;
         if (current_key_row == 3) {
-            // Hàng 3 không có phím ở mép phải -> Nội suy màu 50/50 giữa PgDn [2,16] và Right Arrow [5,16]
+            // Row 3 lacks right-edge key: 50/50 blend between PgDn [2,16] and Right Arrow [5,16]
             uint8_t top_idx = g_led_config.matrix_co[2][16];
             uint8_t bot_idx = g_led_config.matrix_co[5][16];
             RGB top = (top_idx < SN32F2XX_LED_COUNT) ? led_state[top_idx] : (RGB){0, 0, 0};
@@ -646,7 +646,7 @@ void sn32f2xx_init(void) {
 #endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
     }
 #if defined(XINMENG_M87_STRIP_MIRROR)
-    // Kéo High trước khi bật Output để chống nháy sáng (glitch) lúc khởi động
+    // Drive high before output enable to suppress power-on glitch
     SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
     gpio_set_pin_output_push_pull(B6);
     gpio_set_pin_output_push_pull(B9);

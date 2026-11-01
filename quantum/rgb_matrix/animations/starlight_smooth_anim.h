@@ -6,13 +6,13 @@ RGB_MATRIX_EFFECT(STARLIGHT_SMOOTH)
 #    ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
 
 hsv_t STARLIGHT_SMOOTH_math(hsv_t hsv, uint8_t i, uint8_t time) {
-    // 1. Băm phi tuyến bằng sin8 + XOR: Ngẫu nhiên 100%, không bị hiện tượng sọc chéo
+    // Non-linear S-box hash to prevent diagonal artifacts without SRAM allocation
     uint8_t phase = sin8(i * 167) ^ (i * 53);
 
-    // 2. Tự động lệch màu nhẹ ±16 độ quanh màu gốc bạn chọn -> Tạo hiệu ứng Dual Hue mượt!
+    // Dual-hue color offset (+-16 degrees)
     hsv.h += (phase >> 3) - 16;
 
-    // 3. Tính độ sáng sóng sin (Giữ nguyên /2 để khi time tràn từ 255 -> 0 không bị giật khung hình)
+    // Smooth sine wave brightness
     hsv.v = scale8(abs8(sin8((time + phase) / 2) - 128) * 2, hsv.v);
     return hsv;
 }
