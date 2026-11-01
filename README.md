@@ -83,7 +83,7 @@ The flasher will verify checksums and automatically reboot the keyboard into Use
 2. Go to **Settings** (gear icon) and enable **Show Design tab**.
 3. Open the **Design** tab (paintbrush icon).
 4. Click **Load** and select `keyboards/xinmeng_m87/xinmeng_m87_via.json`.
-5. Switch to the **Configure** tab, click **Authorize device**, and select `xinmeng_m87`.
+5. Switch to the **Configure** tab, click **Authorize device**, and select `Xinmeng M87`.
 
 ---
 
