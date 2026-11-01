@@ -11,11 +11,10 @@ static bool soft_off_active   = false;
 static bool saved_sidelight   = true;
 static bool saved_lightbar    = true;
 static bool saved_keylight    = true;
-// Thời lượng chuẩn hóa theo lũy thừa nhị phân để triệt tiêu 100% phép chia (Tổng: 2048ms)
-#define WAVE_DURATION_CHARGE  256   // 2^8 ms  -> Copy trực tiếp byte thấp
-#define WAVE_DURATION_EXPAND  1024  // 2^10 ms -> Dịch phải 2 bit (>> 2)
-#define WAVE_DURATION_REVEAL  768   // 3 * 256 ms -> Nhân nghịch đảo (* 85 >> 8)
-#define WAVE_DURATION_TOTAL   (WAVE_DURATION_CHARGE + WAVE_DURATION_EXPAND + WAVE_DURATION_REVEAL)
+// Thời lượng mở LED khi cắm dây USB / gạt switch (từ F8): 1024ms (256ms lóe sáng tâm F8 + 768ms bung mở ra toàn phím)
+#define WAVE_DURATION_FLASH   256  // 2^8 ms    -> Lõi năng lượng bừng sáng tại F8
+#define WAVE_DURATION_SPREAD  768  // 3 * 256ms -> Nhân nghịch đảo (* 85 >> 8) bung mở
+#define WAVE_DURATION_TOTAL   (WAVE_DURATION_FLASH + WAVE_DURATION_SPREAD)
 
 static uint32_t wave_start_time = 0;
 static bool     wave_active     = false;
@@ -35,6 +34,14 @@ static const uint8_t led_dist_f8[88] = {
 #define COLLAPSE_DURATION_PULL  768  // 3 * 256ms -> Nhân nghịch đảo (* 85 >> 8)
 #define COLLAPSE_DURATION_FLASH 256  // 2^8 ms    -> Copy trực tiếp byte thấp
 #define COLLAPSE_DURATION_TOTAL (COLLAPSE_DURATION_PULL + COLLAPSE_DURATION_FLASH)
+
+// Thời lượng mở LED khi bật mềm (Fn + `): 1024ms (256ms lóe sáng tâm nút ` + 768ms bung mở ra toàn phím)
+#define EXPAND_DURATION_FLASH   256  // 2^8 ms    -> Lõi năng lượng bừng sáng
+#define EXPAND_DURATION_SPREAD  768  // 3 * 256ms -> Nhân nghịch đảo (* 85 >> 8) bung mở
+#define EXPAND_DURATION_TOTAL   (EXPAND_DURATION_FLASH + EXPAND_DURATION_SPREAD)
+
+static uint32_t expand_start_time   = 0;
+static bool     expand_active       = false;
 
 static uint32_t collapse_start_time = 0;
 static bool     collapse_active     = false;
@@ -62,6 +69,7 @@ static inline void collapse_finish(void) {
 
 void power_off_collapse_start(void) {
     wave_active         = false; // Ngắt sóng bật nguồn nếu đang chạy dở
+    expand_active       = false; // Ngắt sóng mở nguồn nếu đang chạy dở
     collapse_start_time = timer_read32();
     collapse_active     = true;
 }
@@ -79,15 +87,35 @@ bool power_off_collapse_is_active(void) {
 
 void power_on_wave_start(void) {
     collapse_active = false; // Ngắt hiệu ứng thu nếu đang chạy dở
+    expand_active   = false; // Ngắt sóng mở nguồn nếu đang chạy dở
     wave_start_time = timer_read32();
     wave_active     = true;
 }
+
 bool power_on_wave_is_active(void) {
     if (!wave_active) {
         return false;
     }
     if (timer_elapsed32(wave_start_time) >= WAVE_DURATION_TOTAL) {
         wave_active = false;
+        return false;
+    }
+    return true;
+}
+
+void soft_on_expand_start(void) {
+    wave_active       = false; // Ngắt sóng bật nguồn nếu đang chạy dở
+    collapse_active   = false; // Ngắt hiệu ứng thu nếu đang chạy dở
+    expand_start_time = timer_read32();
+    expand_active     = true;
+}
+
+bool soft_on_expand_is_active(void) {
+    if (!expand_active) {
+        return false;
+    }
+    if (timer_elapsed32(expand_start_time) >= EXPAND_DURATION_TOTAL) {
+        expand_active = false;
         return false;
     }
     return true;
@@ -100,6 +128,7 @@ static void power_on_wave_render(uint8_t led_min, uint8_t led_max, uint32_t now)
     }
 
     uint32_t elapsed = now - wave_start_time;
+
     if (elapsed >= WAVE_DURATION_TOTAL) {
         wave_active = false;
         return;
@@ -111,119 +140,59 @@ static void power_on_wave_render(uint8_t led_min, uint8_t led_max, uint32_t now)
     }
 
     // -------------------------------------------------------------------------
-    // NHÁNH RIÊNG CHO PHA 0 (0..255ms): Không bắt 88 LED phải check if (phase == 0)
+    // PHA 1 (0..255ms): BỪNG SÁNG & NỞ LÕI TẠI PHÍM F8 (INDEX 8)
     // -------------------------------------------------------------------------
-    if (elapsed < WAVE_DURATION_CHARGE) {
-        uint16_t charge_scaled = ((uint16_t)elapsed * max_val) >> 8;
+    if (elapsed < WAVE_DURATION_FLASH) {
+        uint8_t flash_t  = (uint8_t)elapsed; // 0..255
+        uint8_t core_rad = (flash_t >> 3);   // 0..31
+        uint16_t scale   = ((uint16_t)flash_t * max_val) >> 8;
+
         for (uint8_t i = led_min; i < led_max; i++) {
             uint8_t d = led_dist_f8[i];
-            if (d >= 42) {
+            if (d > core_rad) {
                 rgb_matrix_set_color(i, 0, 0, 0);
                 continue;
             }
-            uint8_t r = (d == 0) ? (uint8_t)charge_scaled : (uint8_t)((charge_scaled * (42 - d)) >> 6);
-            uint16_t b_est = (uint16_t)r << 1;
-            uint8_t b = (b_est > max_val) ? max_val : (uint8_t)b_est;
-            rgb_matrix_set_color(i, r, r, b);
+            uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 3);
+            uint8_t b         = (uint8_t)(((uint16_t)intensity * scale) >> 8);
+            uint8_t g         = b - (b >> 2); // Xanh băng
+            uint8_t r         = (d == 0) ? g : (b >> 1);
+            rgb_matrix_set_color(i, r, g, b);
         }
         return;
     }
 
     // -------------------------------------------------------------------------
-    // TÍNH THÔNG SỐ CHO PHA 1 & PHA 2 (0% Phép chia)
+    // PHA 2 (256..1023ms): VÒNG SÓNG BUNG MỞ TỪ F8 RA TOÀN BÀN PHÍM (EASE-OUT)
     // -------------------------------------------------------------------------
-    bool     is_phase2     = false;
-    uint16_t radius        = 0;
-    uint8_t  reveal_radius = 0;
-
-    if (elapsed < (WAVE_DURATION_CHARGE + WAVE_DURATION_EXPAND)) {
-        // PHA 1: exp_elapsed chạy 0..1023 -> dịch phải 2 bit ra 0..255
-        uint16_t t        = (uint16_t)((elapsed - WAVE_DURATION_CHARGE) >> 2);
-        uint16_t inv_t    = 255 - t;
-        uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);
-        radius            = (ease_out * 250) >> 8;
-    } else {
-        // PHA 2: rev_elapsed chạy 0..767 -> nhân 85 >> 8 tương đương chia 3 (ra 0..254)
-        is_phase2            = true;
-        uint32_t rev_elapsed = elapsed - (WAVE_DURATION_CHARGE + WAVE_DURATION_EXPAND);
-        uint16_t t           = (uint16_t)((rev_elapsed * 85) >> 8);
-        uint16_t inv_t       = 255 - t;
-        uint16_t ease_out    = 255 - ((inv_t * inv_t) >> 8);
-        radius               = 250 + ((t * 60) >> 8);
-        reveal_radius        = (uint8_t)((ease_out * 245) >> 8);
-    }
+    uint16_t expand_t = (uint16_t)(elapsed - WAVE_DURATION_FLASH); // 0..767
+    uint16_t t        = (uint16_t)((expand_t * 85) >> 8);          // 0..254
+    uint16_t inv_t    = 255 - t;
+    uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);              // 0..255
+    uint8_t  expand_radius = (uint8_t)(((uint32_t)ease_out * 245) >> 8); // 0..245
 
     for (uint8_t i = led_min; i < led_max; i++) {
         uint8_t d = led_dist_f8[i];
 
-        // Pha 2: Vùng đã mở khóa -> Bỏ qua ngay lập tức (nhường cho hiệu ứng chính)
-        if (is_phase2 && d < reveal_radius) {
+        // Vùng bên trong vòng bung (sóng đã quét qua) -> BỎ QUA để lộ hiệu ứng LED bình thường!
+        if (d < expand_radius) {
             continue;
         }
 
-        // Vùng sóng chưa chạm tới -> Tắt đen (Độ rộng mép trước = 16 để dùng << 4)
-        if (d >= radius + 16) {
+        // Vùng ngoài vòng bung (sóng chưa tới) -> Tắt đen
+        if (d >= expand_radius + 32) {
             rgb_matrix_set_color(i, 0, 0, 0);
             continue;
         }
 
-        uint8_t r, g, b;
+        // Vành đai sóng năng lượng bung mở (rộng 32 đơn vị)
+        uint8_t offset = d - expand_radius; // 0..31
+        uint8_t rim    = 31 - offset;       // 31..0
 
-        if (d > radius) {
-            // Mép trước của sóng (ahead: 1..15) -> Dịch bit thuần túy, không nhân
-            uint8_t fade = (uint8_t)((16 - (d - radius)) << 4); // 16..240
-            r            = fade;
-            g            = fade - (fade >> 4); // Xấp xỉ fade * 240 / 256
-            b            = fade - (fade >> 2); // Xấp xỉ fade * 192 / 256
-        } else {
-            /* ----------------------------------------------------------------
-             * ĐUÔI SÓNG 4 VÒNG CHUẨN HÓA LŨY THỪA 2 (32, 64, 64, 64)
-             * Liên tục 100% tại mọi điểm nối, 0 lệnh rẽ nhánh kẹp biên (clamp)
-             * ---------------------------------------------------------------- */
-            uint16_t dist_behind = radius - d;
+        uint8_t r = (rim << 2);                         // Ánh tím nhẹ
+        uint8_t g = (rim > 15) ? ((rim - 15) << 4) : 0; // Lõi xanh băng ở sát mép trong
+        uint8_t b = (rim << 3);                         // Xanh dương chủ đạo
 
-            if (dist_behind < 32) {
-                // Vòng 1 (0..31): Trắng Vàng (252,252,186) -> Vàng Cam (252,128,0)
-                uint8_t p = (uint8_t)dist_behind;
-                r         = 252;
-                g         = 252 - (p << 2);
-                b         = 186 - (p << 2) - (p << 1); // 186 - p * 6
-            } else if (dist_behind < 96) {
-                // Vòng 2 (32..95): Vàng Cam (252,126,0) -> Hồng Neon (252,0,126)
-                uint8_t p = (uint8_t)(dist_behind - 32); // 0..63
-                r         = 252;
-                g         = 126 - (p << 1);
-                b         = p << 1;
-            } else if (dist_behind < 160) {
-                // Vòng 3 (96..159): Hồng Neon (252,0,126) -> Xanh Vũ Trụ (0,126,252)
-                uint8_t p = (uint8_t)(dist_behind - 96); // 0..63
-                r         = (63 - p) << 2;
-                g         = p << 1;
-                b         = 126 + (p << 1);
-            } else {
-                // Vòng 4 (>= 160): Xanh Vũ Trụ (0,126,252) -> Xanh Băng (0,220,221)
-                uint16_t p = dist_behind - 160;
-                if (p > 63) {
-                    p = 63;
-                }
-                r = 0;
-                g = (uint8_t)(126 + p + (p >> 1));
-                b = (uint8_t)(252 - (p >> 1));
-            }
-        }
-
-        // PHA 2: Hòa trộn Viền Lửa Vàng (độ rộng 32 = 2^5) bằng công thức Lerp >> 5
-        if (is_phase2 && d < reveal_radius + 32) {
-            uint8_t rim   = 32 - (d - reveal_radius); // 1..32
-            uint8_t rim_g = 190 + (rim << 1);         // 192..254
-            uint8_t rim_b = (rim > 16) ? (uint8_t)(((rim - 16) << 4) - 1) : 0;
-
-            r += (uint8_t)(((255 - r) * rim) >> 5);
-            g += (uint8_t)(((int16_t)(rim_g - g) * rim) >> 5);
-            b += (uint8_t)(((int16_t)(rim_b - b) * rim) >> 5);
-        }
-
-        // Scale độ sáng tổng
         r = (uint8_t)(((uint16_t)r * max_val) >> 8);
         g = (uint8_t)(((uint16_t)g * max_val) >> 8);
         b = (uint8_t)(((uint16_t)b * max_val) >> 8);
@@ -308,6 +277,81 @@ static void power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t
     }
 }
 
+static void soft_on_expand_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
+    uint32_t elapsed = now - expand_start_time;
+
+    if (elapsed >= EXPAND_DURATION_TOTAL) {
+        expand_active = false;
+        return;
+    }
+
+    uint8_t max_val = rgb_matrix_get_val();
+    if (max_val < 130) {
+        max_val = 130;
+    }
+
+    // -------------------------------------------------------------------------
+    // PHA 1 (0..255ms): BỪNG SÁNG & NỞ LÕI TẠI NÚT ` (INDEX 16)
+    // -------------------------------------------------------------------------
+    if (elapsed < EXPAND_DURATION_FLASH) {
+        uint8_t flash_t  = (uint8_t)elapsed; // 0..255
+        uint8_t core_rad = (flash_t >> 3);   // 0..31
+        uint16_t scale   = ((uint16_t)flash_t * max_val) >> 8;
+
+        for (uint8_t i = led_min; i < led_max; i++) {
+            uint8_t d = led_dist_grave[i];
+            if (d > core_rad) {
+                rgb_matrix_set_color(i, 0, 0, 0);
+                continue;
+            }
+            uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 3);
+            uint8_t b         = (uint8_t)(((uint16_t)intensity * scale) >> 8);
+            uint8_t g         = b - (b >> 2); // Xanh băng
+            uint8_t r         = (d == 0) ? g : (b >> 1);
+            rgb_matrix_set_color(i, r, g, b);
+        }
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // PHA 2 (256..1023ms): VÒNG SÓNG BUNG MỞ RA TOÀN BÀN PHÍM (EASE-OUT)
+    // -------------------------------------------------------------------------
+    uint16_t expand_t = (uint16_t)(elapsed - EXPAND_DURATION_FLASH); // 0..767
+    uint16_t t        = (uint16_t)((expand_t * 85) >> 8);           // 0..254
+    uint16_t inv_t    = 255 - t;
+    uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);               // 0..255
+    uint8_t  expand_radius = (uint8_t)(((uint32_t)ease_out * 245) >> 8); // 0..245
+
+    for (uint8_t i = led_min; i < led_max; i++) {
+        uint8_t d = led_dist_grave[i];
+
+        // Vùng bên trong vòng bung (sóng đã quét qua) -> BỎ QUA để lộ hiệu ứng LED bình thường!
+        if (d < expand_radius) {
+            continue;
+        }
+
+        // Vùng ngoài vòng bung (sóng chưa tới) -> Tắt đen
+        if (d >= expand_radius + 32) {
+            rgb_matrix_set_color(i, 0, 0, 0);
+            continue;
+        }
+
+        // Vành đai sóng năng lượng bung mở (rộng 32 đơn vị)
+        uint8_t offset = d - expand_radius; // 0..31
+        uint8_t rim    = 31 - offset;       // 31..0
+
+        uint8_t r = (rim << 2);                         // Ánh tím nhẹ
+        uint8_t g = (rim > 15) ? ((rim - 15) << 4) : 0; // Lõi xanh băng ở sát mép trong
+        uint8_t b = (rim << 3);                         // Xanh dương chủ đạo
+
+        r = (uint8_t)(((uint16_t)r * max_val) >> 8);
+        g = (uint8_t)(((uint16_t)g * max_val) >> 8);
+        b = (uint8_t)(((uint16_t)b * max_val) >> 8);
+
+        rgb_matrix_set_color(i, r, g, b);
+    }
+}
+
 void load_led_strip_settings(void) {
     if (eeconfig_is_enabled()) {
         uint32_t cfg = eeconfig_read_kb();
@@ -364,7 +408,9 @@ void m87_exit_soft_off(void) {
     keylight_enabled  = saved_keylight;
     soft_off_active   = false;
 
-    power_on_wave_start();
+    if (keylight_enabled && rgb_matrix_is_enabled()) {
+        soft_on_expand_start();
+    }
 }
 
 void keyboard_post_init_kb(void) {
@@ -453,6 +499,15 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
             rgb_matrix_set_color(i, 0, 0, 0);
         }
         return true;
+    }
+
+    if (expand_active) {
+        if ((uint32_t)(now - expand_start_time) >= EXPAND_DURATION_TOTAL) {
+            expand_active = false;
+        } else {
+            soft_on_expand_render(led_min, led_max, now);
+            return true;
+        }
     }
 
     if (wave_active) {

@@ -3,16 +3,56 @@
   "vendorId": "0x0c45",
   "productId": "0x8006",
   "customKeycodes": [
-    { "name": "BT Profile 1", "title": "M87_BT1", "shortName": "BT1" },
-    { "name": "BT Profile 2", "title": "M87_BT2", "shortName": "BT2" },
-    { "name": "BT Profile 3", "title": "M87_BT3", "shortName": "BT3" },
-    { "name": "2.4G Wireless", "title": "M87_24G", "shortName": "2.4G" },
-    { "name": "Battery Status", "title": "M87_BAT", "shortName": "BAT" },
-    { "name": "Toggle Sidelight", "title": "SIDELIGHT_TOGG", "shortName": "SideLT" },
-    { "name": "Toggle Lightbar Logo", "title": "LIGHTBAR_TOGG", "shortName": "LogoLT" },
-    { "name": "Show Battery Level", "title": "BATTERY_LEVEL", "shortName": "BatLvl" },
-    { "name": "Toggle Keylight", "title": "KEYLIGHT_TOGG", "shortName": "KeyLT" },
-    { "name": "Soft Power Off", "title": "M87_OFF", "shortName": "SoftOff" }
+    {
+      "name": "BT Profile 1",
+      "title": "M87_BT1",
+      "shortName": "BT1"
+    },
+    {
+      "name": "BT Profile 2",
+      "title": "M87_BT2",
+      "shortName": "BT2"
+    },
+    {
+      "name": "BT Profile 3",
+      "title": "M87_BT3",
+      "shortName": "BT3"
+    },
+    {
+      "name": "2.4G Wireless",
+      "title": "M87_24G",
+      "shortName": "2.4G"
+    },
+    {
+      "name": "Battery Status",
+      "title": "M87_BAT",
+      "shortName": "BAT"
+    },
+    {
+      "name": "Toggle Sidelight",
+      "title": "SIDELIGHT_TOGG",
+      "shortName": "SideLT"
+    },
+    {
+      "name": "Toggle Lightbar Logo",
+      "title": "LIGHTBAR_TOGG",
+      "shortName": "LogoLT"
+    },
+    {
+      "name": "Show Battery Level",
+      "title": "BATTERY_LEVEL",
+      "shortName": "BatLvl"
+    },
+    {
+      "name": "Toggle Keylight",
+      "title": "KEYLIGHT_TOGG",
+      "shortName": "KeyLT"
+    },
+    {
+      "name": "Soft Power Off",
+      "title": "M87_OFF",
+      "shortName": "SoftOff"
+    }
   ],
   "matrix": {
     "rows": 6,
@@ -228,88 +268,56 @@
                   1
                 ],
                 [
-                  "Breathing",
+                  "Cycle Up Down",
                   2
                 ],
                 [
-                  "Band Spiral Val",
+                  "Rainbow Moving Chevron",
                   3
                 ],
                 [
-                  "Cycle All",
+                  "Flower Blooming",
                   4
                 ],
                 [
-                  "Cycle Left Right",
+                  "Hue Wave",
                   5
                 ],
                 [
-                  "Cycle Up Down",
+                  "Typing Heatmap",
                   6
                 ],
                 [
-                  "Rainbow Moving Chevron",
+                  "Digital Rain",
                   7
                 ],
                 [
-                  "Cycle Out In",
+                  "Solid Reactive Simple",
                   8
                 ],
                 [
-                  "Cycle Out In Dual",
+                  "Solid Reactive",
                   9
                 ],
                 [
-                  "Cycle Pinwheel",
+                  "Solid Reactive Multiwide",
                   10
                 ],
                 [
-                  "Cycle Spiral",
+                  "Solid Reactive Multinexus",
                   11
                 ],
                 [
-                  "Dual Beacon",
+                  "Solid Multisplash",
                   12
                 ],
                 [
-                  "Rainbow Beacon",
+                  "Starlight Smooth (Dual Hue)",
                   13
                 ],
                 [
-                  "Jellybean Raindrops",
+                  "Riverflow",
                   14
-                ],
-                [
-                  "Pixel Rain",
-                  15
-                ],
-                [
-                  "Solid Reactive Simple",
-                  16
-                ],
-                [
-                  "Solid Reactive Multiwide",
-                  17
-                ],
-                [
-                  "Solid Reactive Multinexus",
-                  18
-                ],
-                [
-                  "Splash",
-                  19
-                ],
-                [
-                  "Multisplash",
-                  20
-                ],
-                [
-                  "Solid Splash",
-                  21
-                ],
-                [
-                  "Solid Multisplash",
-                  22
                 ]
               ]
             },

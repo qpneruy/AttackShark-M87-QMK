@@ -64,6 +64,8 @@ void power_on_wave_start(void);
 bool power_on_wave_is_active(void);
 void power_off_collapse_start(void);
 bool power_off_collapse_is_active(void);
+void soft_on_expand_start(void);
+bool soft_on_expand_is_active(void);
 void ch582f_send_keyboard(report_keyboard_t *report);
 bool m87_is_soft_off(void);
 void m87_enter_soft_off(void);
