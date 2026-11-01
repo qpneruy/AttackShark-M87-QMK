@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "quantum.h"
+#include "usb_util.h"
 #include "SN32F240B.h"
 
 // Hardware Pin Bitmasks (Port 0)

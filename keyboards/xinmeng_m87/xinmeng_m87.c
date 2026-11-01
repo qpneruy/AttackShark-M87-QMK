@@ -129,11 +129,11 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
         max_val = 130;
     }
 
-    // Phase 1 (0..255ms): Core bloom at origin
+    // Phase 1 (0..255ms): Core flash 0..63 around center (F8 or `)
     if (elapsed < WAVE_DURATION_FLASH) {
-        uint8_t flash_t  = (uint8_t)elapsed;
-        uint8_t core_rad = (flash_t >> 3);
-        uint16_t scale   = ((uint16_t)flash_t * max_val) >> 8;
+        uint8_t  flash_t  = (uint8_t)elapsed;
+        uint8_t  core_rad = (flash_t >> 2); // 0..63 (covers circular rows around center)
+        uint16_t scale    = ((uint16_t)flash_t * max_val) >> 8;
 
         for (uint8_t i = led_min; i < led_max; i++) {
             uint8_t d = dist_lut[i];
@@ -141,7 +141,7 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
                 rgb_matrix_set_color(i, 0, 0, 0);
                 continue;
             }
-            uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 3);
+            uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 2);
             uint8_t b         = (uint8_t)(((uint16_t)intensity * scale) >> 8);
             uint8_t g         = b - (b >> 2);
             uint8_t r         = (d == 0) ? g : (b >> 1);
@@ -150,34 +150,35 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
         return true;
     }
 
-    // Phase 2 (256..1023ms): Outward wavefront expansion (Ease-Out)
-    uint16_t expand_t = (uint16_t)(elapsed - WAVE_DURATION_FLASH);
-    uint16_t t        = (uint16_t)((expand_t * 85) >> 8);
-    uint16_t inv_t    = 255 - t;
-    uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);
-    uint8_t  expand_radius = (uint8_t)(((uint32_t)ease_out * 245) >> 8);
+    // Phase 2 (256..1023ms): Outward wave band (64 units thick) from 63 to full board
+    uint16_t expand_t   = (uint16_t)(elapsed - WAVE_DURATION_FLASH);
+    uint16_t t          = (uint16_t)((expand_t * 85) >> 8); // 0..254
+    uint16_t inv_t      = 255 - t;
+    uint16_t ease_out   = 255 - ((inv_t * inv_t) >> 8);
+    uint16_t reveal_rad = ((uint32_t)ease_out * 245) >> 8;  // Inner reveal boundary: 0..244
+    uint16_t front_rad  = reveal_rad + 64;                  // Leading edge: 64..308 (seamless from Phase 1)
 
     for (uint8_t i = led_min; i < led_max; i++) {
         uint8_t d = dist_lut[i];
 
-        // Inside wavefront: pass through to active effect
-        if (d < expand_radius) {
+        // Passed area: reveal underlying active effect
+        if (d < reveal_rad) {
             continue;
         }
 
-        // Outside wavefront: off
-        if (d >= expand_radius + 32) {
+        // Unreached area: off
+        if (d >= front_rad) {
             rgb_matrix_set_color(i, 0, 0, 0);
             continue;
         }
 
-        // Expanding energy rim (32-unit width)
-        uint8_t offset = d - expand_radius;
-        uint8_t rim    = 31 - offset;
+        // Inside wavefront band (64 units wide)
+        uint8_t pos = (uint8_t)(d - reveal_rad); // 0..63
+        uint8_t rim = (pos < 48) ? (pos + (pos >> 1)) : ((63 - pos) << 2); // 0..71..0
 
-        uint8_t r = (rim << 2);
-        uint8_t g = (rim > 15) ? ((rim - 15) << 4) : 0;
-        uint8_t b = (rim << 3);
+        uint8_t r = (rim << 1);
+        uint8_t g = (rim > 24) ? (uint8_t)((rim - 24) << 2) : 0;
+        uint8_t b = (rim >= 63) ? 255 : (rim << 2);
 
         r = (uint8_t)(((uint16_t)r * max_val) >> 8);
         g = (uint8_t)(((uint16_t)g * max_val) >> 8);
@@ -332,6 +333,7 @@ void keyboard_post_init_kb(void) {
     keyboard_post_init_user();
 }
 
+
 void housekeeping_task_kb(void) {
     ch582f_task();
 
@@ -416,14 +418,8 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
     if (anim_state == ANIM_WAVE_F8) {
         expand_effect_render(led_min, led_max, now, led_dist_f8);
     } else if (anim_state == ANIM_EXPAND_GRAVE) {
-        if (expand_effect_render(led_min, led_max, now, led_dist_grave)) {
-            return true;
-        }
-    }
-    // -------------------------------------------------------------
-    // 1. Battery Indicator on Number Row (Keys 1..0: LED indices 17..26)
-    // -------------------------------------------------------------
-    else if (battery_show_timer != 0) {
+        expand_effect_render(led_min, led_max, now, led_dist_grave);
+    } else if (battery_show_timer != 0) {
         if ((uint32_t)(now - battery_show_timer) < 3000) {
             // Only render when intersection with number row keys (17..26) is non-empty
             uint8_t start = (led_min > 17) ? led_min : 17;

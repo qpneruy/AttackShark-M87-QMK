@@ -141,7 +141,7 @@ void ch582f_init(void) {
     last_tx_time = timer_read32();
     is_sleeping = false;
     uint32_t p0 = SN_GPIO0->DATA;
-    last_vbus_state = (p0 & MASK_PIN_VBUS) != 0;
+    last_vbus_state = usb_connected_state();
     if (!(p0 & MASK_PIN_SWITCH_BT)) {
         ch582f_set_mode(M87_MODE_BT);
     } else if (!(p0 & MASK_PIN_SWITCH_24G)) {
@@ -494,14 +494,14 @@ void ch582f_task(void) {
         }
     }
 
-    // Detect USB cable insertion on VBUS (P0.2)
-    bool cur_vbus = (p0 & MASK_PIN_VBUS) != 0;
+    // Detect USB cable insertion via hardware USB controller state
+    bool cur_vbus = usb_connected_state();
     if (cur_vbus != last_vbus_state) {
         last_vbus_state = cur_vbus;
         if (cur_vbus) {
             if (m87_is_soft_off()) {
                 m87_exit_soft_off();
-            } else {
+            } else if (!power_on_wave_is_active()) {
                 power_on_wave_start();
             }
         }

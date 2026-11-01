@@ -6,6 +6,7 @@
 #include "quantum.h"
 #include "ch582f.h"
 
+
 extern bool sidelight_enabled;
 extern bool lightbar_enabled;
 extern bool keylight_enabled;
