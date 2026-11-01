@@ -37,7 +37,7 @@ index bfd7a3d565..09b4064b83 100644
          cfg->channels[ch_idx].mode    = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
  #    endif // SN32F2XX_PWM_CONTROL
      }
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +    cfg->channels[22].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
 +    cfg->channels[22].pfpamsk = 0; // B6 (Left) is PA
 +    cfg->channels[1].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
@@ -52,7 +52,7 @@ index bfd7a3d565..09b4064b83 100644
          gpio_write_pin_high(led_row_pins[x]);
  #    endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
      }
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +    pwmDisableChannel(&PWMD1, 22);
 +    pwmDisableChannel(&PWMD1, 1);
 +    pwmDisableChannel(&PWMD1, 3);
@@ -66,7 +66,7 @@ index bfd7a3d565..09b4064b83 100644
 -    current_row++;
 -    /* Check if counter has wrapped around, reset before the next pass */
 -    if (current_row == SN32F2XX_RGB_MATRIX_ROWS_HW) current_row = 0;
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +    extern bool sidelight_enabled;
 +    extern bool lightbar_enabled;
 +    extern bool keylight_enabled;
@@ -143,7 +143,7 @@ index bfd7a3d565..09b4064b83 100644
 +
 +#if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
 +            uint8_t duty = 0;
-+#    if defined(XINGMENG_M87_STRIP_MIRROR)
++#    if defined(XINMENG_M87_STRIP_MIRROR)
 +            if (keylight_enabled)
 +#    endif
 +            {
@@ -168,7 +168,7 @@ index bfd7a3d565..09b4064b83 100644
 -            default:;
 +    }
 +
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +    if (sidelight_enabled) {
 +        // 1. Left strip (B6 - Channel 22): Col 0, Red & Green swapped
 +        uint8_t left_idx = row_map[0];
@@ -215,7 +215,7 @@ index bfd7a3d565..09b4064b83 100644
      // Enable RGB output
 -    if (enable_pwm_output) {
 +    if (enable_pwm_output
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +        || sidelight_enabled || lightbar_enabled
 +#endif
 +    ) {
@@ -226,7 +226,7 @@ index bfd7a3d565..09b4064b83 100644
          gpio_write_pin_high(led_row_pins[x]);
  #endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
      }
-+#if defined(XINGMENG_M87_STRIP_MIRROR)
++#if defined(XINMENG_M87_STRIP_MIRROR)
 +    // Kéo High trước khi bật Output để chống nháy sáng (glitch) lúc khởi động
 +    SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
 +    gpio_set_pin_output_push_pull(B6);

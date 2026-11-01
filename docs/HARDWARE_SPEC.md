@@ -1,8 +1,8 @@
-# Hardware Specification & Technical Architecture: Xingmeng M87
+# Hardware Specification & Technical Architecture: Xinmeng M87
 
 Complete Hardware Reverse-Engineering, Pinout, Matrix Schematic & Wireless UART Protocol Specification.
 
-* **Target Device**: **Xingmeng M87** Tri-Mode Wireless Mechanical Keyboard (International market name: **Attack Shark M87**).
+* **Target Device**: **Xinmeng M87** Tri-Mode Wireless Mechanical Keyboard (International market name: **Attack Shark M87**).
 * **Form Factor**: ANSI TKL 87-key + 1 Dedicated RGB Mode Indicator + 3 Auxiliary Underglow Strips.
 * **Primary Keyboard MCU**: **SONiX SN32F248BF** (Rebranded as **HFD2201KBA**) — 32-bit ARM Cortex-M0 @ 48MHz, 64KB Flash, 8KB SRAM, LQFP-64 package.
 * **Wireless Coprocessor**: **WCH CH582F** — 32-bit RISC-V, integrated Bluetooth 5.3 BLE & 2.4GHz RF transceivers.
@@ -148,7 +148,7 @@ Input sense pins on Port D (`GPIO3`):
 }
 ```
 
-### 3.3. Underglow Strips & Strip Mirroring (`XINGMENG_M87_STRIP_MIRROR`)
+### 3.3. Underglow Strips & Strip Mirroring (`XINMENG_M87_STRIP_MIRROR`)
 The three auxiliary strips share anode power lines with the main rows, but sink current through dedicated PWM channels:
 * **Pin 40 (`B6` / `P1.6`)**: Left Side Strip (8 LEDs, PWM Channel 22). Mirrored from Column 0 color data (`C12`), with hardware Red/Green channel swap.
 * **Pin 43 (`B9` / `P1.9`)**: Right Side Strip (8 LEDs, PWM Channel 1). Mirrored from Column 16 color data (`B12`), with hardware Red/Green channel swap.

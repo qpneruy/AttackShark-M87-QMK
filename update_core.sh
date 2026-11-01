@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Update QMK Core & Sonix ChibiOS HAL from upstream SonixQMK
-# Excludes keyboards/ so your standalone Xingmeng M87 tree is never conflicted.
+# Excludes keyboards/ so your standalone Xinmeng M87 tree is never conflicted.
 # ==============================================================================
 set -e
 
@@ -30,4 +30,4 @@ fi
 echo "==> Updating hardware submodules (ChibiOS / ChibiOS-Contrib / LUFA)..."
 git submodule update --init lib/chibios lib/chibios-contrib lib/lufa lib/printf
 
-echo "==> Success! QMK Core updated cleanly without touching keyboards/xingmeng_m87."
+echo "==> Success! QMK Core updated cleanly without touching keyboards/xinmeng_m87."

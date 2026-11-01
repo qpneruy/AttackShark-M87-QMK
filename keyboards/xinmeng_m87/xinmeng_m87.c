@@ -1,7 +1,7 @@
 // Copyright 2026 HuuTinh (@qpneruy)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "xingmeng_m87.h"
+#include "xinmeng_m87.h"
 
 bool sidelight_enabled = true;
 bool lightbar_enabled  = true;

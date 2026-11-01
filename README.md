@@ -1,17 +1,17 @@
-# Xingmeng M87 (Attack Shark M87) Standalone QMK/VIA Firmware Repository
+# Xinmeng M87 (Attack Shark M87) Standalone QMK/VIA Firmware Repository
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![SonixQMK Base](https://img.shields.io/badge/Base-SonixQMK%20sn32__develop-orange.svg)](https://github.com/SonixQMK/qmk_firmware)
 [![VIA Compatible](https://img.shields.io/badge/VIA-v3%20Compatible-green.svg)](https://usevia.app)
 [![Polling Rate](https://img.shields.io/badge/Polling%20Rate-500Hz%20(Native)-brightgreen.svg)](#)
 
-A streamlined, standalone firmware repository for the **Xingmeng M87** (Attack Shark M87) mechanical keyboard with full **QMK & VIA support**, **Tri-Mode wireless** (Bluetooth 5.3, 2.4GHz RF, Wired USB), and independent multi-zone RGB lighting.
+A streamlined, standalone firmware repository for the **Xinmeng M87** (Attack Shark M87) mechanical keyboard with full **QMK & VIA support**, **Tri-Mode wireless** (Bluetooth 5.3, 2.4GHz RF, Wired USB), and independent multi-zone RGB lighting.
 
 ---
 
 ## Hardware Overview
 
-The Xingmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-key) mechanical keyboard powered by a dual-MCU architecture:
+The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-key) mechanical keyboard powered by a dual-MCU architecture:
 
 * **Primary Keyboard MCU**: **HFD2201KBA** (rebranded **SONiX SN32F248BF**, ARM Cortex-M0 @ 48MHz, 64KB Flash, 8KB SRAM, LQFP-64).
 * **Wireless Coprocessor**: **WCH CH582F** (BLE 5.3 & 2.4GHz RF, interfaced via UART2 @ 115200 bps).
@@ -72,7 +72,7 @@ You know it is in Bootloader mode if the board is connected to your PC, does not
 
 ### 3. Flash the Firmware
 ```bash
-./sonixflasher -v 0c45/7040 -f firmware_binaries/xingmeng_m87_via.bin
+./sonixflasher -v 0c45/7040 -f firmware_binaries/xinmeng_m87_via.bin
 ```
 The flasher will verify checksums and automatically reboot the keyboard into User Mode.
 ---
@@ -82,8 +82,8 @@ The flasher will verify checksums and automatically reboot the keyboard into Use
 1. Open **[usevia.app](https://usevia.app)** in a Chromium-based browser (Chrome, Edge, Brave).
 2. Go to **Settings** (gear icon) and enable **Show Design tab**.
 3. Open the **Design** tab (paintbrush icon).
-4. Click **Load** and select `keyboards/xingmeng_m87/xingmeng_m87_via.json`.
-5. Switch to the **Configure** tab, click **Authorize device**, and select `xingmeng_m87`.
+4. Click **Load** and select `keyboards/xinmeng_m87/xinmeng_m87_via.json`.
+5. Switch to the **Configure** tab, click **Authorize device**, and select `xinmeng_m87`.
 
 ---
 
@@ -93,13 +93,13 @@ Because this repository is already a standalone QMK environment, you can build d
 
 ```bash
 # Compile default firmware (includes VIA v3 by default):
-qmk compile -kb xingmeng_m87 -km default
+qmk compile -kb xinmeng_m87 -km default
 
 # Flash directly after compile:
-qmk flash -kb xingmeng_m87 -km default
+qmk flash -kb xinmeng_m87 -km default
 ```
 
-The resulting binary will be generated at the repository root as `xingmeng_m87_default.bin`.
+The resulting binary will be generated at the repository root as `xinmeng_m87_default.bin`.
 
 ---
 

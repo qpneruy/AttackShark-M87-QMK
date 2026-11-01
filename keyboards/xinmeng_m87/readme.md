@@ -1,18 +1,18 @@
-# Xingmeng M87
+# Xinmeng M87
 
-*A custom QMK firmware port for the Xingmeng M87 (Attack Shark M87) mechanical keyboard.*
+*A custom QMK firmware port for the Xinmeng M87 (Attack Shark M87) mechanical keyboard.*
 
 * **Keyboard Maintainer**: [HuuTinh (@qpneruy)](https://github.com/qpneruy)
-* **Hardware Supported**: Xingmeng M87 / Attack Shark M87 (SONiX SN32F248BF / HFD2201KBA)
+* **Hardware Supported**: Xinmeng M87 / Attack Shark M87 (SONiX SN32F248BF / HFD2201KBA)
 * **Hardware Availability**: [Attack Shark](https://attackshark.com)
 
 Make example for this keyboard (after setting up your build environment):
 
-    make xingmeng_m87:default
+    make xinmeng_m87:default
 
 Flashing example for this keyboard:
 
-    make xingmeng_m87:default:flash
+    make xinmeng_m87:default:flash
 
 See the [build environment setup](https://docs.qmk.fm/#/getting_started_build_tools) and the [make instructions](https://docs.qmk.fm/#/getting_started_make_guide) for more information. Brand new to QMK? Start with our [Complete Newbs Guide](https://docs.qmk.fm/#/newbs).
 
@@ -28,7 +28,7 @@ Enter the bootloader in 2 ways:
 
 | Feature | Details |
 | :--- | :--- |
-| **Commercial Model** | Xingmeng M87 (Export name: Attack Shark M87) |
+| **Commercial Model** | Xinmeng M87 (Export name: Attack Shark M87) |
 | **Layout** | ANSI TKL 87-key standard (Tenkeyless) |
 | **Mounting Style** | Gasket Mount, Flex-cut PCB |
 | **Microcontroller (MCU)** | SONiX SN32F248BF / HFD2201KBA (ARM Cortex-M0 @ 48MHz, 64KB Flash, 8KB SRAM, LQFP-64) |

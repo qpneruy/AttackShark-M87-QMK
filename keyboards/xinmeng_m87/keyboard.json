@@ -1,6 +1,6 @@
 {
     "manufacturer": "HuuTinh",
-    "keyboard_name": "xingmeng_m87",
+    "keyboard_name": "xinmeng_m87",
     "maintainer": "qpneruy",
     "debounce": 20,
     "development_board": "sn32f240b_shared_matrix",
