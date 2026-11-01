@@ -1,6 +1,7 @@
 # Xinmeng M87 (Attack Shark M87) Standalone QMK/VIA Firmware Repository
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![Latest Release](https://img.shields.io/github/v/release/qpneruy/xinmeng-m87-qmk?color=brightgreen&label=Latest%20Release)](https://github.com/qpneruy/xinmeng-m87-qmk/releases/latest)
 [![SonixQMK Base](https://img.shields.io/badge/Base-SonixQMK%20sn32__develop-orange.svg)](https://github.com/SonixQMK/qmk_firmware)
 [![VIA Compatible](https://img.shields.io/badge/VIA-v3%20Compatible-green.svg)](https://usevia.app)
 [![Polling Rate](https://img.shields.io/badge/Polling%20Rate-500Hz%20(Native)-brightgreen.svg)](#)
@@ -51,6 +52,8 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 
 Flashing is performed using **[Sonix Flasher](https://github.com/SonixQMK/SonixFlasherC)** (available for Linux and Windows):
 
+
+> 📥 **Ready-to-flash binaries**: Download pre-compiled `.bin` files and VIA definition directly from the **[Latest Release](https://github.com/qpneruy/xinmeng-m87-qmk/releases/latest)**.
 ### 1. Put the Keyboard into Bootloader Mode
 
 The Sonix SN32F248B can be put into Bootloader mode by shorting the **BOOT** pin to ground (GND) before powering the board.
