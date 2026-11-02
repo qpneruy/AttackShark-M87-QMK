@@ -19,8 +19,7 @@
     "rgb_matrix": {
         "animations": {
             "cycle_up_down": true,
-            "digital_rain": true,
-            "flower_blooming": true,
+            "supernova_scintillation": true,
             "hue_wave": true,
             "rainbow_moving_chevron": true,
             "riverflow": true,

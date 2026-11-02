@@ -4,6 +4,7 @@
 
 #include "ch582f.h"
 #include <string.h>
+#include "action.h"
 #include "host.h"
 #include "host_driver.h"
 #include "SN32F240B.h"
@@ -152,6 +153,7 @@ void ch582f_init(void) {
 }
 
 void ch582f_set_mode(m87_mode_t mode) {
+    clear_keyboard();
     ch582f_wake_if_needed();
     current_mode = mode;
     is_pairing = false;
@@ -317,23 +319,6 @@ void ch582f_send_keyboard(report_keyboard_t *report) {
     last_tx_time = timer_read32();
 }
 
-void ch582f_send_nkro(report_nkro_t *report) {
-    if (current_mode == M87_MODE_WIRED) {
-        return;
-    }
-    ch582f_wake_if_needed();
-
-    uint8_t sum = 0xA2;
-    uart2_write_byte_fast(0xA2);
-    for (uint8_t i = 0; i < 14; i++) {
-        uint8_t b = report->bits[i];
-        sum += b;
-        uart2_write_byte_fast(b);
-    }
-    uart2_write_byte_fast(sum);
-
-    last_tx_time = timer_read32();
-}
 
 void ch582f_send_consumer(uint16_t usage) {
     if (current_mode == M87_MODE_WIRED) {
@@ -406,12 +391,16 @@ static void ch582f_driver_send_raw_hid(uint8_t *data, uint8_t length) {
 // -------------------------------------------------------------
 // Fast Packet RX
 // -------------------------------------------------------------
+static inline bool is_rx_header(uint8_t b) {
+    return (b == 0x5B || b == 0x5A || b == 0x5C || b == 0x61);
+}
+
 static inline void parse_rx_byte(uint8_t b) {
     static uint8_t rx_buf[3];
     static uint8_t rx_idx = 0;
 
     if (rx_idx == 0) {
-        if (b == 0x5B || b == 0x5A || b == 0x5C || b == 0x61) {
+        if (is_rx_header(b)) {
             rx_buf[0] = b;
             rx_idx = 1;
         }
@@ -468,8 +457,19 @@ static inline void parse_rx_byte(uint8_t b) {
                 battery_percent = (param > 100) ? 100 : param;
                 is_sleeping = false;
             }
+            rx_idx = 0;
+        } else {
+            if (is_rx_header(param)) {
+                rx_buf[0] = param;
+                rx_buf[1] = cksum;
+                rx_idx    = 2;
+            } else if (is_rx_header(cksum)) {
+                rx_buf[0] = cksum;
+                rx_idx    = 1;
+            } else {
+                rx_idx    = 0;
+            }
         }
-        rx_idx = 0;
     }
 }
 

@@ -6,11 +6,14 @@
 bool sidelight_enabled = true;
 bool lightbar_enabled  = true;
 bool keylight_enabled  = true;
-static uint32_t battery_show_timer = 0;
-static bool soft_off_active   = false;
-static bool saved_sidelight   = true;
-static bool saved_lightbar    = true;
-static bool saved_keylight    = true;
+static uint32_t battery_show_timer   = 0;
+static bool     soft_off_active      = false;
+static bool     saved_sidelight      = true;
+static bool     saved_lightbar       = true;
+static bool     saved_keylight       = true;
+static bool     saved_rgb_enabled    = true;
+static bool     allow_curtain_reveal = true;
+
 // Unified animation timing: 1024ms total (256ms core bloom + 768ms ease-out spread)
 #define WAVE_DURATION_FLASH   256
 #define WAVE_DURATION_SPREAD  768
@@ -59,8 +62,11 @@ static inline void collapse_finish(void) {
         sidelight_enabled = false;
         lightbar_enabled  = false;
         keylight_enabled  = false;
+        rgb_matrix_set_color_all(0, 0, 0);
+        rgb_matrix_disable_noeeprom();
+    } else {
+        rgb_matrix_set_color_all(0, 0, 0);
     }
-    rgb_matrix_set_color_all(0, 0, 0);
 }
 
 void power_off_collapse_start(void) {
@@ -69,14 +75,7 @@ void power_off_collapse_start(void) {
 }
 
 bool power_off_collapse_is_active(void) {
-    if (anim_state != ANIM_COLLAPSE_GRAVE) {
-        return false;
-    }
-    if (timer_elapsed32(anim_start_time) >= COLLAPSE_DURATION_TOTAL) {
-        collapse_finish();
-        return false;
-    }
-    return true;
+    return anim_state == ANIM_COLLAPSE_GRAVE;
 }
 
 void power_on_wave_start(void) {
@@ -85,14 +84,7 @@ void power_on_wave_start(void) {
 }
 
 bool power_on_wave_is_active(void) {
-    if (anim_state != ANIM_WAVE_F8) {
-        return false;
-    }
-    if (timer_elapsed32(anim_start_time) >= WAVE_DURATION_TOTAL) {
-        anim_state = ANIM_NONE;
-        return false;
-    }
-    return true;
+    return anim_state == ANIM_WAVE_F8;
 }
 
 void soft_on_expand_start(void) {
@@ -101,18 +93,14 @@ void soft_on_expand_start(void) {
 }
 
 bool soft_on_expand_is_active(void) {
-    if (anim_state != ANIM_EXPAND_GRAVE) {
-        return false;
-    }
-    if (timer_elapsed32(anim_start_time) >= WAVE_DURATION_TOTAL) {
-        anim_state = ANIM_NONE;
-        return false;
-    }
-    return true;
+    return anim_state == ANIM_EXPAND_GRAVE;
 }
 
-static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now, const uint8_t *dist_lut) {
+static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now, const uint8_t *dist_lut, bool is_overlay) {
     if (!keylight_enabled) {
+        if (anim_state == ANIM_WAVE_F8) {
+            allow_curtain_reveal = false;
+        }
         anim_state = ANIM_NONE;
         return false;
     }
@@ -120,6 +108,9 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
     uint32_t elapsed = now - anim_start_time;
 
     if (elapsed >= WAVE_DURATION_TOTAL) {
+        if (anim_state == ANIM_WAVE_F8) {
+            allow_curtain_reveal = false;
+        }
         anim_state = ANIM_NONE;
         return false;
     }
@@ -138,13 +129,19 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
         for (uint8_t i = led_min; i < led_max; i++) {
             uint8_t d = dist_lut[i];
             if (d > core_rad) {
-                rgb_matrix_set_color(i, 0, 0, 0);
+                if (!is_overlay) {
+                    rgb_matrix_set_color(i, 0, 0, 0);
+                }
                 continue;
             }
             uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 2);
             uint8_t b         = (uint8_t)(((uint16_t)intensity * scale) >> 8);
             uint8_t g         = b - (b >> 2);
             uint8_t r         = (d == 0) ? g : (b >> 1);
+
+            if (is_overlay && b < 4) {
+                continue;
+            }
             rgb_matrix_set_color(i, r, g, b);
         }
         return true;
@@ -166,9 +163,11 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
             continue;
         }
 
-        // Unreached area: off
+        // Unreached area: off (only when running curtain reveal)
         if (d >= front_rad) {
-            rgb_matrix_set_color(i, 0, 0, 0);
+            if (!is_overlay) {
+                rgb_matrix_set_color(i, 0, 0, 0);
+            }
             continue;
         }
 
@@ -176,25 +175,25 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
         uint8_t pos = (uint8_t)(d - reveal_rad); // 0..63
         uint8_t rim = (pos < 48) ? (pos + (pos >> 1)) : ((63 - pos) << 2); // 0..71..0
 
-        uint8_t r = (rim << 1);
-        uint8_t g = (rim > 24) ? (uint8_t)((rim - 24) << 2) : 0;
-        uint8_t b = (rim >= 63) ? 255 : (rim << 2);
+        if (is_overlay && rim < 4) {
+            continue;
+        }
 
-        r = (uint8_t)(((uint16_t)r * max_val) >> 8);
-        g = (uint8_t)(((uint16_t)g * max_val) >> 8);
-        b = (uint8_t)(((uint16_t)b * max_val) >> 8);
+        uint8_t r = (uint8_t)(((uint16_t)rim * max_val) >> 7);
+        uint8_t g = (rim > 24) ? (uint8_t)(((uint16_t)(rim - 24) * max_val) >> 6) : 0;
+        uint8_t b = (rim >= 63) ? max_val : (uint8_t)(((uint16_t)rim * max_val) >> 6);
 
         rgb_matrix_set_color(i, r, g, b);
     }
     return true;
 }
 
-static void power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
+static bool power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
     uint32_t elapsed = now - anim_start_time;
 
     if (elapsed >= COLLAPSE_DURATION_TOTAL) {
         collapse_finish();
-        return;
+        return false;
     }
 
     uint8_t max_val = rgb_matrix_get_val();
@@ -206,11 +205,11 @@ static void power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t
     // Phase 2 (768..1023ms): Convergence flash at ` (Index 16)
     // -------------------------------------------------------------------------
     if (elapsed >= COLLAPSE_DURATION_PULL) {
-        uint8_t flash_t   = (uint8_t)(elapsed - COLLAPSE_DURATION_PULL); // 0..255
-        uint8_t inv_flash = 255 - flash_t;
+        uint8_t  flash_t   = (uint8_t)(elapsed - COLLAPSE_DURATION_PULL); // 0..255
+        uint8_t  inv_flash = 255 - flash_t;
         // Core bloom radius shrinks from 32 to 0
-        uint8_t core_rad  = (inv_flash >> 3); // 0..31
-        uint16_t scale    = ((uint16_t)inv_flash * max_val) >> 8;
+        uint8_t  core_rad  = (inv_flash >> 3); // 0..31
+        uint16_t scale     = ((uint16_t)inv_flash * max_val) >> 8;
 
         for (uint8_t i = led_min; i < led_max; i++) {
             uint8_t d = led_dist_grave[i];
@@ -218,21 +217,21 @@ static void power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t
                 rgb_matrix_set_color(i, 0, 0, 0);
                 continue;
             }
-            
+
             uint8_t intensity = (d == 0) ? 255 : (uint8_t)((uint16_t)(core_rad - d) << 3);
             uint8_t b         = (uint8_t)(((uint16_t)intensity * scale) >> 8);
             uint8_t g         = b - (b >> 2);
             uint8_t r         = (d == 0) ? g : (b >> 1);
             rgb_matrix_set_color(i, r, g, b);
         }
-        return;
+        return true;
     }
 
     // -------------------------------------------------------------------------
     // Phase 1 (0..767ms): Inward suction collapse to ` (Ease-In)
     // -------------------------------------------------------------------------
-    uint16_t t       = (uint16_t)((elapsed * 85) >> 8); // 0..254
-    uint16_t ease_in = (t * t) >> 8;
+    uint16_t t               = (uint16_t)((elapsed * 85) >> 8); // 0..254
+    uint16_t ease_in         = (t * t) >> 8;
     uint8_t  collapse_radius = (uint8_t)(245 - ((ease_in * 245) >> 8));
 
     for (uint8_t i = led_min; i < led_max; i++) {
@@ -250,20 +249,16 @@ static void power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t
         }
 
         // Event horizon rim (32-unit width)
-        
         uint8_t offset = d - collapse_radius; // 0..31
         uint8_t rim    = 31 - offset;
 
-        uint8_t r = (rim << 2);
-        uint8_t g = (rim > 15) ? ((rim - 15) << 4) : 0;
-        uint8_t b = (rim << 3);
-
-        r = (uint8_t)(((uint16_t)r * max_val) >> 8);
-        g = (uint8_t)(((uint16_t)g * max_val) >> 8);
-        b = (uint8_t)(((uint16_t)b * max_val) >> 8);
+        uint8_t r = (uint8_t)(((uint16_t)rim * max_val) >> 6);
+        uint8_t g = (rim > 15) ? (uint8_t)(((uint16_t)(rim - 15) * max_val) >> 4) : 0;
+        uint8_t b = (uint8_t)(((uint16_t)rim * max_val) >> 5);
 
         rgb_matrix_set_color(i, r, g, b);
     }
+    return true;
 }
 
 void load_led_strip_settings(void) {
@@ -277,11 +272,14 @@ void load_led_strip_settings(void) {
 
 void save_led_strip_settings(void) {
     if (eeconfig_is_enabled()) {
-        uint32_t cfg = eeconfig_read_kb() & ~0x1Cu;
+        uint32_t old_cfg = eeconfig_read_kb();
+        uint32_t cfg     = old_cfg & ~0x1Cu;
         if (!sidelight_enabled) cfg |= 0x04;
         if (!lightbar_enabled)  cfg |= 0x08;
         if (!keylight_enabled)  cfg |= 0x10;
-        eeconfig_update_kb(cfg);
+        if (cfg != old_cfg) {
+            eeconfig_update_kb(cfg);
+        }
     }
 }
 
@@ -294,34 +292,37 @@ void m87_enter_soft_off(void) {
         return;
     }
 
-    saved_sidelight = sidelight_enabled;
-    saved_lightbar  = lightbar_enabled;
-    saved_keylight  = keylight_enabled;
+    saved_sidelight   = sidelight_enabled;
+    saved_lightbar    = lightbar_enabled;
+    saved_keylight    = keylight_enabled;
+    saved_rgb_enabled = rgb_matrix_is_enabled();
 
     clear_keyboard();
     SN_GPIO0->BCLR  = MASK_LED_CAPS | MASK_LED_WINLOCK;
     soft_off_active = true;
 
-    if (keylight_enabled && rgb_matrix_is_enabled()) {
+    if (keylight_enabled && saved_rgb_enabled) {
         power_off_collapse_start();
     } else {
-        sidelight_enabled = false;
-        lightbar_enabled  = false;
-        keylight_enabled  = false;
-        rgb_matrix_set_color_all(0, 0, 0);
+        collapse_finish();
     }
 }
+
 void m87_exit_soft_off(void) {
     if (!soft_off_active) {
         return;
     }
 
-        sidelight_enabled = saved_sidelight;
+    sidelight_enabled = saved_sidelight;
     lightbar_enabled  = saved_lightbar;
     keylight_enabled  = saved_keylight;
     soft_off_active   = false;
 
-    if (keylight_enabled && rgb_matrix_is_enabled()) {
+    if (saved_rgb_enabled) {
+        rgb_matrix_enable_noeeprom();
+    }
+
+    if (keylight_enabled && saved_rgb_enabled) {
         soft_on_expand_start();
     }
 }
@@ -333,11 +334,17 @@ void keyboard_post_init_kb(void) {
     keyboard_post_init_user();
 }
 
-
 void housekeeping_task_kb(void) {
     ch582f_task();
 
-    if (anim_state == ANIM_COLLAPSE_GRAVE && timer_elapsed32(anim_start_time) >= COLLAPSE_DURATION_TOTAL) {
+    if ((anim_state == ANIM_WAVE_F8 || anim_state == ANIM_EXPAND_GRAVE) &&
+        timer_elapsed32(anim_start_time) >= WAVE_DURATION_TOTAL) {
+        if (anim_state == ANIM_WAVE_F8) {
+            allow_curtain_reveal = false;
+        }
+        anim_state = ANIM_NONE;
+    } else if (anim_state == ANIM_COLLAPSE_GRAVE &&
+               timer_elapsed32(anim_start_time) >= COLLAPSE_DURATION_TOTAL) {
         collapse_finish();
     }
 
@@ -346,13 +353,11 @@ void housekeeping_task_kb(void) {
 
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     if (soft_off_active) {
-        if (record->event.pressed) {
-            if (keycode == M87_OFF) {
-                m87_exit_soft_off();
-                return false;
-            }
+        if (record->event.pressed && keycode == M87_OFF) {
+            m87_exit_soft_off();
+            return false;
         }
-        if (keycode == MO(1)) {
+        if (IS_QK_MOMENTARY(keycode) || IS_QK_LAYER_MOD(keycode)) {
             return true;
         }
         return false;
@@ -401,10 +406,7 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
     uint32_t now = timer_read32();
 
     if (anim_state == ANIM_COLLAPSE_GRAVE) {
-        if ((uint32_t)(now - anim_start_time) >= COLLAPSE_DURATION_TOTAL) {
-            collapse_finish();
-        } else {
-            power_off_collapse_render(led_min, led_max, now);
+        if (power_off_collapse_render(led_min, led_max, now)) {
             return true;
         }
     }
@@ -416,9 +418,9 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
     }
 
     if (anim_state == ANIM_WAVE_F8) {
-        expand_effect_render(led_min, led_max, now, led_dist_f8);
+        expand_effect_render(led_min, led_max, now, led_dist_f8, !allow_curtain_reveal);
     } else if (anim_state == ANIM_EXPAND_GRAVE) {
-        expand_effect_render(led_min, led_max, now, led_dist_grave);
+        expand_effect_render(led_min, led_max, now, led_dist_grave, false);
     } else if (battery_show_timer != 0) {
         if ((uint32_t)(now - battery_show_timer) < 3000) {
             // Only render when intersection with number row keys (17..26) is non-empty
@@ -432,7 +434,6 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
                 uint8_t lit_count = (pct >= 95) ? 10 : (uint8_t)(((uint16_t)(pct + 5) * 205) >> 11);
                 if (lit_count == 0) lit_count = 1;
 
-                
                 uint8_t r = 0, g = 255;
                 if (pct <= 20) {
                     r = 255; g = 0;
