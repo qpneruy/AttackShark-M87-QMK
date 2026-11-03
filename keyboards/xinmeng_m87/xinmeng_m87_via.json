@@ -52,6 +52,11 @@
       "name": "Soft Power Off",
       "title": "M87_OFF",
       "shortName": "SoftOff"
+    },
+    {
+      "name": "Save RGB to EEPROM",
+      "title": "M87_RGB_SAVE",
+      "shortName": "RGBSav"
     }
   ],
   "matrix": {

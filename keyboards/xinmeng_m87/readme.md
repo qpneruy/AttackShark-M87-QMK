@@ -68,6 +68,7 @@ Enter the bootloader in 2 ways:
 | **`Fn + \`** | `RM_NEXT` | Next RGB Effect |
 | **`Fn + Del`** | `RM_HUEU` | Cycle Hue |
 | **`Fn + End`** | `LIGHTBAR_TOGG` | Toggle Logo Lightbar |
+| **`Fn + /`** | `M87_RGB_SAVE` | Save Current RGB & Strip Settings to EEPROM |
 | **`Fn + RCtrl`** | `SIDELIGHT_TOGG` | Toggle Left & Right Side RGB Strips |
 | **`Fn + Up`** / **`Fn + Down`** | `RM_VALU` / `RM_VALD` | Increase / Decrease RGB Brightness |
 | **`Fn + Right`** / **`Fn + Left`** | `RM_SPDU` / `RM_SPDD` | Increase / Decrease RGB Effect Speed |

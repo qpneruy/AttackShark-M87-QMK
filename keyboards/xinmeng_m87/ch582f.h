@@ -43,7 +43,8 @@ enum m87_custom_keycodes {
     BATTERY_LEVEL,
     KEYLIGHT_TOGG,
     M87_OFF,
-    M87_SAFE_RANGE = QK_KB_10
+    M87_RGB_SAVE,
+    M87_SAFE_RANGE = QK_KB_15
 };
 
 void ch582f_init(void);

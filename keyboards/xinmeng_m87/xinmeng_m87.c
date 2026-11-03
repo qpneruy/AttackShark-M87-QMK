@@ -19,15 +19,35 @@ static bool     allow_curtain_reveal = true;
 #define WAVE_DURATION_SPREAD  768
 #define WAVE_DURATION_TOTAL   (WAVE_DURATION_FLASH + WAVE_DURATION_SPREAD)
 
+// Mode transition sweep timing: 640ms total (~25% slower)
+#define SWEEP_DURATION_TOTAL  640
+
+// Input damping / inertia timings (simulates stable non-twitchy response)
+#define RGB_MODE_COOLDOWN_MS  260
+#define RGB_ADJ_COOLDOWN_MS   110
+#define RGB_INERTIA_TICK_MS   10
+
 enum {
     ANIM_NONE = 0,
     ANIM_WAVE_F8,
     ANIM_EXPAND_GRAVE,
-    ANIM_COLLAPSE_GRAVE
+    ANIM_COLLAPSE_GRAVE,
+    ANIM_MODE_SWEEP
 };
 
-static uint32_t anim_start_time = 0;
-static uint8_t  anim_state      = ANIM_NONE;
+static uint32_t anim_start_time      = 0;
+static uint8_t  anim_state           = ANIM_NONE;
+static int8_t   mode_sweep_dir       = 1;     // +1: Left->Right (RM_NEXT), -1: Right->Left (RM_PREV)
+static bool     mode_sweep_committed = false;
+
+// Smooth inertia state for in-RAM RGB adjustments (Hue / Val / Speed)
+static uint32_t rgb_mode_cooldown_timer = 0;
+static uint32_t rgb_adj_cooldown_timer  = 0;
+static uint32_t rgb_inertia_timer       = 0;
+static uint8_t  rgb_target_hue          = 0;
+static uint8_t  rgb_target_val          = 0;
+static uint8_t  rgb_target_spd          = 0;
+static bool     rgb_inertia_active      = false;
 
 /* Precomputed distance table from F8 (Index 8) for all 88 LEDs (scaled 0..240) */
 static const uint8_t led_dist_f8[88] = {
@@ -55,6 +75,67 @@ static const uint8_t led_dist_grave[88] = {
      77,  81,  86, 114, 142, 154, 167, 180, 211, 225, 240,
     212
 };
+
+#if defined(RGB_MATRIX_ENABLE)
+static inline void rgb_inertia_sync(void) {
+    rgb_target_hue     = rgb_matrix_config.hsv.h;
+    rgb_target_val     = rgb_matrix_config.hsv.v;
+    rgb_target_spd     = rgb_matrix_config.speed;
+    rgb_inertia_active = false;
+}
+
+static inline void rgb_inertia_flush(void) {
+    if (rgb_inertia_active) {
+        rgb_matrix_config.hsv.h = rgb_target_hue;
+        rgb_matrix_config.hsv.v = rgb_target_val;
+        rgb_matrix_config.speed = rgb_target_spd;
+        rgb_inertia_active      = false;
+    }
+}
+
+static inline uint8_t step_toward_u8(uint8_t cur, uint8_t target, uint8_t step) {
+    if (cur < target) {
+        uint8_t diff = target - cur;
+        return cur + ((diff < step) ? diff : step);
+    } else if (cur > target) {
+        uint8_t diff = cur - target;
+        return cur - ((diff < step) ? diff : step);
+    }
+    return cur;
+}
+
+static inline void mode_sweep_commit(void) {
+    if (!mode_sweep_committed) {
+        mode_sweep_committed = true;
+        if (mode_sweep_dir >= 0) {
+            rgb_matrix_step_noeeprom();
+        } else {
+            rgb_matrix_step_reverse_noeeprom();
+        }
+    }
+}
+
+static void mode_sweep_start(int8_t dir) {
+    if (!keylight_enabled || !rgb_matrix_is_enabled()) {
+        if (dir >= 0) {
+            rgb_matrix_step_noeeprom();
+        } else {
+            rgb_matrix_step_reverse_noeeprom();
+        }
+        return;
+    }
+
+    // If a previous sweep was still in Phase 1, commit it before starting the new sweep
+    if (anim_state == ANIM_MODE_SWEEP && !mode_sweep_committed) {
+        mode_sweep_commit();
+    }
+
+    mode_sweep_dir       = dir;
+    mode_sweep_committed = false;
+    anim_start_time      = timer_read32();
+    anim_state           = ANIM_MODE_SWEEP;
+}
+#endif
 
 static inline void collapse_finish(void) {
     anim_state = ANIM_NONE;
@@ -188,6 +269,93 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
     return true;
 }
 
+#if defined(RGB_MATRIX_ENABLE)
+/*
+ * Mode Sweep Transition (512ms):
+ * - Ahead of wavefront (d > front_pos): Old effect keeps running live.
+ * - At front_pos >= 240: Switches to new effect underneath the wave curtain.
+ * - Behind wave tail (d < front_pos - 256): New effect is revealed live.
+ */
+static bool mode_sweep_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
+    if (!keylight_enabled) {
+        mode_sweep_commit();
+        anim_state = ANIM_NONE;
+        return false;
+    }
+
+    uint32_t elapsed = now - anim_start_time;
+    if (elapsed >= SWEEP_DURATION_TOTAL) {
+        mode_sweep_commit();
+        anim_state = ANIM_NONE;
+        return false;
+    }
+
+    // Map 0..640ms -> 0..255 with blended ease-out for natural inertia
+    uint16_t t = (uint16_t)(((uint32_t)elapsed * 409) >> 10);
+    if (t > 255) {
+        t = 255;
+    }
+    uint16_t inv_t     = 255 - t;
+    uint16_t ease_out  = 255 - ((inv_t * inv_t) >> 8);
+    uint16_t progress  = (t + ease_out) >> 1;      // 0..255
+
+    // Wavefront travels 0..496 (240 board span + 256 wave thickness)
+    uint16_t front_pos = ((uint32_t)progress * 496) >> 8;
+
+    // Commit the new mode right as the wave covers the far edge (240..256 window)
+    if (front_pos >= 240 && !mode_sweep_committed) {
+        mode_sweep_commit();
+    }
+
+    uint8_t max_val = rgb_matrix_get_val();
+    if (max_val < 130) {
+        max_val = 130;
+    }
+
+    for (uint8_t i = led_min; i < led_max; i++) {
+        uint8_t d = (mode_sweep_dir >= 0) ? led_dist_grave[i] : (uint8_t)(240 - led_dist_grave[i]);
+
+        // 1. Unreached area ahead of wave: keep OLD effect running live
+        if (front_pos < d) {
+            continue;
+        }
+
+        uint16_t dist_from_front = front_pos - d;
+
+        // 2. Passed area behind wave tail: reveal NEW effect running live
+        if (dist_from_front >= 256) {
+            continue;
+        }
+
+        // 3. Inside the 256-unit travelling wave (pos: 0 at leading edge .. 255 at tail)
+        uint8_t pos = (uint8_t)dist_from_front;
+        uint8_t intensity;
+
+        if (pos < 56) {
+            // Leading crest (0..55): brisk rise from old effect to peak crest
+            intensity = (uint8_t)((pos << 2) + (pos >> 1));
+        } else {
+            // Trailing wake (56..255): smooth quadratic taper into new effect
+            uint16_t rem = 255 - pos;                       // 0..199
+            uint16_t u   = ((uint16_t)rem * 328) >> 8;      // 0..255
+            intensity    = (uint8_t)((u * u) >> 8);
+        }
+
+        // Blend softly at the very edges so both old and new effects feather in/out
+        if (intensity < 6) {
+            continue;
+        }
+
+        uint8_t b = (uint8_t)(((uint16_t)intensity * max_val) >> 8);
+        uint8_t g = (intensity > 36) ? (uint8_t)(((uint16_t)(intensity - 36) * max_val) >> 8) : (b >> 2);
+        uint8_t r = (intensity > 140) ? (uint8_t)(((uint16_t)(intensity - 140) * max_val) >> 7) : (b >> 2);
+
+        rgb_matrix_set_color(i, r, g, b);
+    }
+    return true;
+}
+#endif
+
 static bool power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
     uint32_t elapsed = now - anim_start_time;
 
@@ -292,6 +460,13 @@ void m87_enter_soft_off(void) {
         return;
     }
 
+#if defined(RGB_MATRIX_ENABLE)
+    if (anim_state == ANIM_MODE_SWEEP) {
+        mode_sweep_commit();
+    }
+    rgb_inertia_flush();
+#endif
+
     saved_sidelight   = sidelight_enabled;
     saved_lightbar    = lightbar_enabled;
     saved_keylight    = keylight_enabled;
@@ -322,6 +497,10 @@ void m87_exit_soft_off(void) {
         rgb_matrix_enable_noeeprom();
     }
 
+#if defined(RGB_MATRIX_ENABLE)
+    rgb_inertia_sync();
+#endif
+
     if (keylight_enabled && saved_rgb_enabled) {
         soft_on_expand_start();
     }
@@ -330,6 +509,9 @@ void m87_exit_soft_off(void) {
 void keyboard_post_init_kb(void) {
     ch582f_init();
     load_led_strip_settings();
+#if defined(RGB_MATRIX_ENABLE)
+    rgb_inertia_sync();
+#endif
     power_on_wave_start();
     keyboard_post_init_user();
 }
@@ -347,6 +529,50 @@ void housekeeping_task_kb(void) {
                timer_elapsed32(anim_start_time) >= COLLAPSE_DURATION_TOTAL) {
         collapse_finish();
     }
+#if defined(RGB_MATRIX_ENABLE)
+    else if (anim_state == ANIM_MODE_SWEEP) {
+        uint32_t elapsed = timer_elapsed32(anim_start_time);
+        if (elapsed >= SWEEP_DURATION_TOTAL) {
+            mode_sweep_commit();
+            anim_state = ANIM_NONE;
+        } else if (!mode_sweep_committed && elapsed >= 250) {
+            // Ensure mode commit happens even if LED rendering is throttled
+            uint16_t t = (uint16_t)(((uint32_t)elapsed * 409) >> 10);
+            if (t > 255) {
+                t = 255;
+            }
+            uint16_t inv_t    = 255 - t;
+            uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);
+            uint16_t progress = (t + ease_out) >> 1;
+            if (((uint32_t)progress * 496) >> 8 >= 240) {
+                mode_sweep_commit();
+            }
+        }
+    }
+
+    // Smooth inertia interpolation for Hue, Brightness (Val), and Speed
+    if (rgb_inertia_active && timer_elapsed32(rgb_inertia_timer) >= RGB_INERTIA_TICK_MS) {
+        rgb_inertia_timer = timer_read32();
+
+        // Circular shortest-path interpolation for Hue (0..255 wrap-around)
+        int8_t hue_diff = (int8_t)(rgb_target_hue - rgb_matrix_config.hsv.h);
+        if (hue_diff > 0) {
+            rgb_matrix_config.hsv.h += (hue_diff > 2) ? 2 : 1;
+        } else if (hue_diff < 0) {
+            rgb_matrix_config.hsv.h -= (hue_diff < -2) ? 2 : 1;
+        }
+
+        // Smooth linear damping for Brightness (Val) and Speed
+        rgb_matrix_config.hsv.v = step_toward_u8(rgb_matrix_config.hsv.v, rgb_target_val, 2);
+        rgb_matrix_config.speed = step_toward_u8(rgb_matrix_config.speed, rgb_target_spd, 2);
+
+        if (rgb_matrix_config.hsv.h == rgb_target_hue &&
+            rgb_matrix_config.hsv.v == rgb_target_val &&
+            rgb_matrix_config.speed == rgb_target_spd) {
+            rgb_inertia_active = false;
+        }
+    }
+#endif
 
     housekeeping_task_user();
 }
@@ -378,21 +604,133 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
         }
         switch (keycode) {
             case SIDELIGHT_TOGG:
-                sidelight_enabled = !sidelight_enabled;
-                save_led_strip_settings();
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    sidelight_enabled       = !sidelight_enabled;
+                }
                 return false;
             case LIGHTBAR_TOGG:
-                lightbar_enabled = !lightbar_enabled;
-                save_led_strip_settings();
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    lightbar_enabled        = !lightbar_enabled;
+                }
                 return false;
             case BATTERY_LEVEL:
                 ch582f_poll_battery();
                 battery_show_timer = timer_read32();
                 return false;
             case KEYLIGHT_TOGG:
-                keylight_enabled = !keylight_enabled;
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    keylight_enabled        = !keylight_enabled;
+                }
+                return false;
+            case M87_RGB_SAVE:
+#if defined(RGB_MATRIX_ENABLE)
+                if (anim_state == ANIM_MODE_SWEEP) {
+                    mode_sweep_commit();
+                }
+                rgb_inertia_flush();
+#endif
+                // Explicitly commit current RGB Matrix & strip settings to Flash/EEPROM
+                eeconfig_force_flush_rgb_matrix();
                 save_led_strip_settings();
                 return false;
+
+            /*
+             * =========================================================================
+             * IN-RAM RGB ADJUSTMENTS (_noeeprom) WITH DAMPED INERTIA & WIPE TRANSITION
+             * Prevents internal Flash Wear-Leveling Erase/Write collisions & MCU reset,
+             * while simulating smooth physical inertia and sweeping mode transitions.
+             * =========================================================================
+             */
+#if defined(RGB_MATRIX_ENABLE)
+            case RM_NEXT:
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    mode_sweep_start(1);
+                }
+                return false;
+            case RM_PREV:
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    mode_sweep_start(-1);
+                }
+                return false;
+            case RM_HUEU:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_h           = rgb_matrix_config.hsv.h;
+                    rgb_matrix_config.hsv.h = rgb_inertia_active ? rgb_target_hue : cur_h;
+                    rgb_matrix_increase_hue_noeeprom();
+                    rgb_target_hue          = rgb_matrix_config.hsv.h;
+                    rgb_matrix_config.hsv.h = cur_h;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_HUED:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_h           = rgb_matrix_config.hsv.h;
+                    rgb_matrix_config.hsv.h = rgb_inertia_active ? rgb_target_hue : cur_h;
+                    rgb_matrix_decrease_hue_noeeprom();
+                    rgb_target_hue          = rgb_matrix_config.hsv.h;
+                    rgb_matrix_config.hsv.h = cur_h;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_VALU:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_v           = rgb_matrix_config.hsv.v;
+                    rgb_matrix_config.hsv.v = rgb_inertia_active ? rgb_target_val : cur_v;
+                    rgb_matrix_increase_val_noeeprom();
+                    rgb_target_val          = rgb_matrix_config.hsv.v;
+                    rgb_matrix_config.hsv.v = cur_v;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_VALD:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_v           = rgb_matrix_config.hsv.v;
+                    rgb_matrix_config.hsv.v = rgb_inertia_active ? rgb_target_val : cur_v;
+                    rgb_matrix_decrease_val_noeeprom();
+                    rgb_target_val          = rgb_matrix_config.hsv.v;
+                    rgb_matrix_config.hsv.v = cur_v;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_SPDU:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_s           = rgb_matrix_config.speed;
+                    rgb_matrix_config.speed = rgb_inertia_active ? rgb_target_spd : cur_s;
+                    rgb_matrix_increase_speed_noeeprom();
+                    rgb_target_spd          = rgb_matrix_config.speed;
+                    rgb_matrix_config.speed = cur_s;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_SPDD:
+                if (timer_elapsed32(rgb_adj_cooldown_timer) >= RGB_ADJ_COOLDOWN_MS) {
+                    rgb_adj_cooldown_timer  = timer_read32();
+                    uint8_t cur_s           = rgb_matrix_config.speed;
+                    rgb_matrix_config.speed = rgb_inertia_active ? rgb_target_spd : cur_s;
+                    rgb_matrix_decrease_speed_noeeprom();
+                    rgb_target_spd          = rgb_matrix_config.speed;
+                    rgb_matrix_config.speed = cur_s;
+                    rgb_inertia_active      = true;
+                }
+                return false;
+            case RM_TOGG:
+                if (timer_elapsed32(rgb_mode_cooldown_timer) >= RGB_MODE_COOLDOWN_MS) {
+                    rgb_mode_cooldown_timer = timer_read32();
+                    rgb_matrix_toggle_noeeprom();
+                    rgb_inertia_sync();
+                }
+                return false;
+#endif
         }
     }
     return true;
@@ -421,6 +759,8 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
         expand_effect_render(led_min, led_max, now, led_dist_f8, !allow_curtain_reveal);
     } else if (anim_state == ANIM_EXPAND_GRAVE) {
         expand_effect_render(led_min, led_max, now, led_dist_grave, false);
+    } else if (anim_state == ANIM_MODE_SWEEP) {
+        mode_sweep_render(led_min, led_max, now);
     } else if (battery_show_timer != 0) {
         if ((uint32_t)(now - battery_show_timer) < 3000) {
             // Only render when intersection with number row keys (17..26) is non-empty

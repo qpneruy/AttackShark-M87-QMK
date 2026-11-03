@@ -38,7 +38,8 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 | **`Fn + \`** | `RM_NEXT` | Next RGB Matrix effect |
 | **`Fn + Del`** | `RM_HUEU` | Cycle RGB Hue color |
 | **`Fn + Up` / `Fn + Down`** | `RM_VALU / RM_VALD` | Increase / Decrease Brightness |
-| **`Fn + Right` / `Fn + Left`** | `RM_SPDU / RM_SPDD` | Increase / Decrease Animation Speed |
+| **`Fn + Right`** / **`Fn + Left`** | `RM_SPDU / RM_SPDD` | Increase / Decrease Animation Speed |
+| **`Fn + /`** | `M87_RGB_SAVE` | Explicitly Commit RGB & Strip Settings to Flash/EEPROM |
 | **`Fn + Left Win`** | `GU_TOGG` | Toggle Windows Key Lock |
 | **`Fn + F1 .. F4`** | Shortcuts | My Computer / Web Browser / Calculator / Media Player |
 | **`Fn + F5 .. F8`** | Media Controls | Previous Track / Next Track / Play-Pause / Stop |
