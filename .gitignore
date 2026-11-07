@@ -25,7 +25,7 @@
 *.la
 *.stackdump
 *.sym
-index.html
+!index.html
 firmware_list.json
 
 # QMK-specific
