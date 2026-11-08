@@ -1,0 +1,354 @@
+{
+  "name": "AttackShark M87",
+  "vendorId": "0x0c45",
+  "productId": "0x8006",
+  "customKeycodes": [
+    {
+      "name": "BT Profile 1",
+      "title": "M87_BT1",
+      "shortName": "BT1"
+    },
+    {
+      "name": "BT Profile 2",
+      "title": "M87_BT2",
+      "shortName": "BT2"
+    },
+    {
+      "name": "BT Profile 3",
+      "title": "M87_BT3",
+      "shortName": "BT3"
+    },
+    {
+      "name": "2.4G Wireless",
+      "title": "M87_24G",
+      "shortName": "2.4G"
+    },
+    {
+      "name": "Battery Status",
+      "title": "M87_BAT",
+      "shortName": "BAT"
+    },
+    {
+      "name": "Toggle Sidelight",
+      "title": "SIDELIGHT_TOGG",
+      "shortName": "SideLT"
+    },
+    {
+      "name": "Toggle Lightbar Logo",
+      "title": "LIGHTBAR_TOGG",
+      "shortName": "LogoLT"
+    },
+    {
+      "name": "Show Battery Level",
+      "title": "BATTERY_LEVEL",
+      "shortName": "BatLvl"
+    },
+    {
+      "name": "Toggle Keylight",
+      "title": "KEYLIGHT_TOGG",
+      "shortName": "KeyLT"
+    },
+    {
+      "name": "Soft Power Off",
+      "title": "M87_OFF",
+      "shortName": "SoftOff"
+    },
+    {
+      "name": "Save RGB to EEPROM",
+      "title": "M87_RGB_SAVE",
+      "shortName": "RGBSav"
+    }
+  ],
+  "matrix": {
+    "rows": 6,
+    "cols": 17
+  },
+  "layouts": {
+    "keymap": [
+      [
+        "0,0",
+        {
+          "x": 1
+        },
+        "0,1",
+        "0,2",
+        "0,3",
+        "0,4",
+        {
+          "x": 0.5
+        },
+        "0,5",
+        "0,6",
+        "0,7",
+        "0,8",
+        {
+          "x": 0.5
+        },
+        "0,9",
+        "0,10",
+        "0,11",
+        "0,12",
+        {
+          "x": 0.5
+        },
+        "0,14",
+        "0,15",
+        "0,16"
+      ],
+      [
+        "1,0",
+        "1,1",
+        "1,2",
+        "1,3",
+        "1,4",
+        "1,5",
+        "1,6",
+        "1,7",
+        "1,8",
+        "1,9",
+        "1,10",
+        "1,11",
+        "1,12",
+        {
+          "w": 2
+        },
+        "1,13",
+        {
+          "x": 0.5
+        },
+        "1,14",
+        "1,15",
+        "1,16"
+      ],
+      [
+        {
+          "w": 1.5
+        },
+        "2,0",
+        "2,1",
+        "2,2",
+        "2,3",
+        "2,4",
+        "2,5",
+        "2,6",
+        "2,7",
+        "2,8",
+        "2,9",
+        "2,10",
+        "2,11",
+        "2,12",
+        {
+          "w": 1.5
+        },
+        "2,13",
+        {
+          "x": 0.5
+        },
+        "2,14",
+        "2,15",
+        "2,16"
+      ],
+      [
+        {
+          "w": 1.75
+        },
+        "3,0",
+        "3,1",
+        "3,2",
+        "3,3",
+        "3,4",
+        "3,5",
+        "3,6",
+        "3,7",
+        "3,8",
+        "3,9",
+        "3,10",
+        "3,11",
+        {
+          "w": 2.25
+        },
+        "3,13"
+      ],
+      [
+        {
+          "w": 2.25
+        },
+        "4,0",
+        "4,2",
+        "4,3",
+        "4,4",
+        "4,5",
+        "4,6",
+        "4,7",
+        "4,8",
+        "4,9",
+        "4,10",
+        "4,11",
+        {
+          "w": 2.75
+        },
+        "4,13",
+        {
+          "x": 1.5
+        },
+        "4,15"
+      ],
+      [
+        {
+          "w": 1.25
+        },
+        "5,0",
+        {
+          "w": 1.25
+        },
+        "5,1",
+        {
+          "w": 1.25
+        },
+        "5,2",
+        {
+          "w": 6.25
+        },
+        "5,6",
+        {
+          "w": 1.25
+        },
+        "5,10",
+        {
+          "w": 1.25
+        },
+        "5,11",
+        {
+          "w": 1.25
+        },
+        "5,12",
+        {
+          "w": 1.25
+        },
+        "5,13",
+        {
+          "x": 0.5
+        },
+        "5,14",
+        "5,15",
+        "5,16"
+      ]
+    ]
+  },
+  "menus": [
+    {
+      "label": "Lighting",
+      "content": [
+        {
+          "label": "Backlight",
+          "content": [
+            {
+              "label": "Brightness",
+              "type": "range",
+              "options": [
+                0,
+                255
+              ],
+              "content": [
+                "id_qmk_rgb_matrix_brightness",
+                3,
+                1
+              ]
+            },
+            {
+              "label": "Effect",
+              "type": "dropdown",
+              "content": [
+                "id_qmk_rgb_matrix_effect",
+                3,
+                2
+              ],
+              "options": [
+                [
+                  "All Off",
+                  0
+                ],
+                [
+                  "Solid Color",
+                  1
+                ],
+                [
+                  "Cycle Up Down",
+                  2
+                ],
+                [
+                  "Rainbow Moving Chevron",
+                  3
+                ],
+                [
+                  "Hue Wave",
+                  4
+                ],
+                [
+                  "Typing Heatmap",
+                  5
+                ],
+                [
+                  "Supernova Scintillation",
+                  6
+                ],
+                [
+                  "Solid Reactive Simple",
+                  7
+                ],
+                [
+                  "Solid Reactive",
+                  8
+                ],
+                [
+                  "Solid Reactive Multiwide",
+                  9
+                ],
+                [
+                  "Solid Reactive Multinexus",
+                  10
+                ],
+                [
+                  "Solid Multisplash",
+                  11
+                ],
+                [
+                  "Starlight Smooth (Dual Hue)",
+                  12
+                ],
+                [
+                  "Riverflow",
+                  13
+                ]
+              ]
+            },
+            {
+              "showIf": "{id_qmk_rgb_matrix_effect} != 0",
+              "label": "Effect Speed",
+              "type": "range",
+              "options": [
+                0,
+                255
+              ],
+              "content": [
+                "id_qmk_rgb_matrix_effect_speed",
+                3,
+                3
+              ]
+            },
+            {
+              "showIf": "{id_qmk_rgb_matrix_effect} != 0",
+              "label": "Color",
+              "type": "color",
+              "content": [
+                "id_qmk_rgb_matrix_color",
+                3,
+                4
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

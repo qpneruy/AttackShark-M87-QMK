@@ -161,7 +161,7 @@ static void rgb_ch_ctrl(PWMConfig *cfg) {
         cfg->channels[ch_idx].mode    = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
 #    endif // SN32F2XX_PWM_CONTROL
     }
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
     cfg->channels[22].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
     cfg->channels[22].pfpamsk = 0; // B6 (Left) is PA
     cfg->channels[1].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
@@ -356,7 +356,7 @@ static void shared_matrix_rgb_disable_output(void) {
         gpio_write_pin_high(led_row_pins[x]);
 #    endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
     }
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
     pwmDisableChannel(&PWMD1, 22);
     pwmDisableChannel(&PWMD1, 1);
     pwmDisableChannel(&PWMD1, 3);
@@ -366,7 +366,7 @@ static void shared_matrix_rgb_disable_output(void) {
 }
 
 static void update_pwm_channels(PWMDriver *pwmp) {
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
     extern bool sidelight_enabled;
     extern bool lightbar_enabled;
     extern bool keylight_enabled;
@@ -418,7 +418,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
 
 #if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
             uint8_t duty = 0;
-#    if defined(XINMENG_M87_STRIP_MIRROR)
+#    if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
             if (keylight_enabled)
 #    endif
             {
@@ -431,7 +431,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         }
     }
 
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
     if (sidelight_enabled) {
         // 1. Left strip (B6 - Channel 22): Col 0, Red & Green swapped
         uint8_t left_idx = row_map[0];
@@ -484,7 +484,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
 
     // Enable RGB output
     if (enable_pwm_output
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
         || sidelight_enabled || lightbar_enabled
 #endif
     ) {
@@ -645,7 +645,7 @@ void sn32f2xx_init(void) {
         gpio_write_pin_high(led_row_pins[x]);
 #endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
     }
-#if defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
     // Drive high before output enable to suppress power-on glitch
     SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
     gpio_set_pin_output_push_pull(B6);

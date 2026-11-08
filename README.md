@@ -1,13 +1,12 @@
-# Xinmeng M87 (Attack Shark M87) Standalone QMK/VIA Firmware Repository
+# Attack Shark M87 (Xinmeng M87) Standalone QMK/VIA Firmware Repository
 
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![Latest Release](https://img.shields.io/github/v/release/qpneruy/xinmeng-m87-qmk?color=brightgreen&label=Latest%20Release)](https://github.com/qpneruy/xinmeng-m87-qmk/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/qpneruy/AttackShark-M87-QMK?color=brightgreen&label=Latest%20Release)](https://github.com/qpneruy/AttackShark-M87-QMK/releases/latest)
 [![SonixQMK Base](https://img.shields.io/badge/Base-SonixQMK%20sn32__develop-orange.svg)](https://github.com/SonixQMK/qmk_firmware)
 [![VIA Compatible](https://img.shields.io/badge/VIA-v3%20Compatible-green.svg)](https://usevia.app)
-[![Polling Rate](https://img.shields.io/badge/Polling%20Rate-500Hz%20(Native)-brightgreen.svg)](#)
+[![Polling Rate](https://img.shields.io/badge/Polling%20Rate-1000Hz%20(Native)-brightgreen.svg)](#)
 
-A streamlined, standalone firmware repository for the **Xinmeng M87** (Attack Shark M87) mechanical keyboard with full **QMK & VIA support**, **Tri-Mode wireless** (Bluetooth 5.3, 2.4GHz RF, Wired USB), and independent multi-zone RGB lighting.
-
+A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinmeng M87) mechanical keyboard with full **QMK & VIA support**, **Tri-Mode wireless** (Bluetooth 5.3, 2.4GHz RF, Wired USB), and independent multi-zone RGB lighting.
 ---
 
 ## Hardware Overview
@@ -54,7 +53,7 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 Flashing is performed using **[Sonix Flasher](https://github.com/SonixQMK/SonixFlasherC)** (available for Linux and Windows):
 
 
-> 📥 **Ready-to-flash binaries**: Download pre-compiled `.bin` files and VIA definition directly from the **[Latest Release](https://github.com/qpneruy/xinmeng-m87-qmk/releases/latest)**.
+> 📥 **Ready-to-flash binaries**: Download pre-compiled `.bin` files and VIA definition directly from the **[Latest Release](https://github.com/qpneruy/AttackShark-M87-QMK/releases/latest)**.
 ### 1. Put the Keyboard into Bootloader Mode
 
 The Sonix SN32F248B can be put into Bootloader mode by shorting the **BOOT** pin to ground (GND) before powering the board.
@@ -76,7 +75,7 @@ You know it is in Bootloader mode if the board is connected to your PC, does not
 
 ### 3. Flash the Firmware
 ```bash
-./sonixflasher -v 0c45/7040 -f firmware_binaries/xinmeng_m87_via.bin
+./sonixflasher -v 0c45/7040 -f firmware_binaries/attackshark_m87_default.bin
 ```
 The flasher will verify checksums and automatically reboot the keyboard into User Mode.
 ---
@@ -86,8 +85,8 @@ The flasher will verify checksums and automatically reboot the keyboard into Use
 1. Open **[usevia.app](https://usevia.app)** in a Chromium-based browser (Chrome, Edge, Brave).
 2. Go to **Settings** (gear icon) and enable **Show Design tab**.
 3. Open the **Design** tab (paintbrush icon).
-4. Click **Load** and select `keyboards/xinmeng_m87/xinmeng_m87_via.json`.
-5. Switch to the **Configure** tab, click **Authorize device**, and select `Xinmeng M87`.
+4. Click **Load** and select `keyboards/attackshark_m87/attackshark_m87_via.json`.
+5. Switch to the **Configure** tab, click **Authorize device**, and select `Attack Shark M87`.
 
 ---
 
@@ -97,13 +96,13 @@ Because this repository is already a standalone QMK environment, you can build d
 
 ```bash
 # Compile default firmware (includes VIA v3 by default):
-qmk compile -kb xinmeng_m87 -km default
+qmk compile -kb attackshark_m87 -km default
 
 # Flash directly after compile:
-qmk flash -kb xinmeng_m87 -km default
+qmk flash -kb attackshark_m87 -km default
 ```
 
-The resulting binary will be generated at the repository root as `xinmeng_m87_default.bin`.
+The resulting binary will be generated at the repository root as `attackshark_m87_default.bin`.
 
 ---
 

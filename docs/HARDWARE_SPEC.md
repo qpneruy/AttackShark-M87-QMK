@@ -1,4 +1,4 @@
-# Hardware Specification & Technical Architecture: Xinmeng M87
+# Hardware Specification & Technical Architecture: Attack Shark M87 (Xinmeng M87)
 
 Complete Hardware Reverse-Engineering, Pinout, Matrix Schematic & Wireless UART Protocol Specification.
 
