@@ -26,6 +26,7 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 | Shortcut | Keycode | Function |
 | :--- | :--- | :--- |
 | **`Fn + Esc`** | `QK_BOOT` | Jump into ISP Bootloader mode |
+| **`Fn + \``** | `M87_OFF` | Soft Power-Off / Sleep *(Press again to Wake)* |
 | **`Fn + 1`** | `M87_BT1` | Bluetooth Profile 1 *(Hold 3s to Pair)* |
 | **`Fn + 2`** | `M87_BT2` | Bluetooth Profile 2 *(Hold 3s to Pair)* |
 | **`Fn + 3`** | `M87_BT3` | Bluetooth Profile 3 *(Hold 3s to Pair)* |
@@ -40,6 +41,7 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 | **`Fn + Right`** / **`Fn + Left`** | `RM_SPDU / RM_SPDD` | Increase / Decrease Animation Speed |
 | **`Fn + /`** | `M87_RGB_SAVE` | Explicitly Commit RGB & Strip Settings to Flash/EEPROM |
 | **`Fn + Left Win`** | `GU_TOGG` | Toggle Windows Key Lock |
+| **`Fn + Left Shift`** | `AS_TOGG` | Toggle Auto Shift On / Off |
 | **`Fn + F1 .. F4`** | Shortcuts | My Computer / Web Browser / Calculator / Media Player |
 | **`Fn + F5 .. F8`** | Media Controls | Previous Track / Next Track / Play-Pause / Stop |
 | **`Fn + F9 .. F11`** | Volume Controls | Audio Mute / Volume Down / Volume Up |

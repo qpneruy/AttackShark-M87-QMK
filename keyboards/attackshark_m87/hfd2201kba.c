@@ -67,6 +67,10 @@ void housekeeping_task_kb(void) {
     update_hardware_indicators();
     hfd_anim_task();
 
+    if (m87_is_soft_off() && !hfd_anim_is_running()) {
+        wait_ms(30);
+    }
+
     housekeeping_task_user();
 }
 
