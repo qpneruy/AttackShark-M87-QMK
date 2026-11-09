@@ -43,7 +43,6 @@ typedef enum {
 
 typedef struct {
     uint16_t keycode;
-    uint32_t press_time;
     keypos_t pos;
     bool     triggered;
 } long_press_tracker_t;

@@ -8,7 +8,7 @@
 #include "wait.h"
 #include "timer.h"
 
-static bool is_rx_header(const uint8_t b);
+static bool is_rx_header(uint8_t b);
 
 void uart2_init(void) {
     sleeping                         = false;

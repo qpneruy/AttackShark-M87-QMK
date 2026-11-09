@@ -18,9 +18,22 @@ bool m87_is_soft_off(void);
 void m87_enter_soft_off(void);
 void m87_exit_soft_off(void);
 
+#if defined(M87_CUSTOM_ANIMATIONS_ENABLE) && defined(M87_SOFT_OFF_ANIM_ENABLE)
 void power_off_collapse_start(void);
 bool power_off_collapse_is_active(void);
-void power_on_wave_start(void);
-bool power_on_wave_is_active(void);
 void soft_on_expand_start(void);
 bool soft_on_expand_is_active(void);
+#else
+static inline void power_off_collapse_start(void) {}
+static inline bool power_off_collapse_is_active(void) { return false; }
+static inline void soft_on_expand_start(void) {}
+static inline bool soft_on_expand_is_active(void) { return false; }
+#endif
+
+#if defined(M87_CUSTOM_ANIMATIONS_ENABLE) && defined(M87_WAVE_F8_ENABLE)
+void power_on_wave_start(void);
+bool power_on_wave_is_active(void);
+#else
+static inline void power_on_wave_start(void) {}
+static inline bool power_on_wave_is_active(void) { return false; }
+#endif
