@@ -28,10 +28,12 @@
 #define LED_CFG_SIDELIGHT       (1u << 2) // 0x04
 #define LED_CFG_LIGHTBAR        (1u << 3) // 0x08
 #define LED_CFG_KEYLIGHT        (1u << 4) // 0x10
-#define LED_CFG_MASK            (LED_CFG_SIDELIGHT | LED_CFG_LIGHTBAR | LED_CFG_KEYLIGHT)
+#define LED_CFG_WIRELESS_ECO    (1u << 5) // 0x20
+#define LED_CFG_MASK            (LED_CFG_SIDELIGHT | LED_CFG_LIGHTBAR | LED_CFG_KEYLIGHT | LED_CFG_WIRELESS_ECO)
+#define LED_CFG_ECO_MIN_SHIFT   8
+#define LED_CFG_ECO_MIN_MASK    (0xFFu << LED_CFG_ECO_MIN_SHIFT)
 
 #define RGB_MODE_COOLDOWN_MS    260
-
 #if defined(M87_WAVE_F8_ENABLE) || defined(M87_SOFT_OFF_ANIM_ENABLE)
 #    define WAVE_DURATION_FLASH     256
 #    define WAVE_DURATION_SPREAD    768
@@ -45,7 +47,8 @@
 #endif
 
 #if defined(M87_MODE_SWEEP_ENABLE)
-#    define SWEEP_DURATION_TOTAL    640
+#    define SWEEP_HALF_MS           384
+#    define SWEEP_DURATION_TOTAL    768
 #endif
 
 #if defined(M87_RGB_INERTIA_ENABLE)
@@ -103,10 +106,11 @@ static const uint8_t led_dist_grave[RGB_MATRIX_LED_COUNT] = {
 // 2. STATE VARIABLES
 // ==========================================================================
 
-bool sidelight_enabled = true;
-bool lightbar_enabled  = true;
-bool keylight_enabled  = true;
-
+bool sidelight_enabled    = true;
+bool lightbar_enabled     = true;
+bool keylight_enabled     = true;
+bool    wireless_eco_enabled = true;
+uint8_t wireless_eco_mins    = 2;
 static bool           soft_off_active         = false;
 static bool           saved_sidelight         = true;
 static bool           saved_lightbar          = true;
@@ -158,7 +162,6 @@ static bool     power_off_collapse_render(uint8_t led_min, uint8_t led_max, uint
 static bool     mode_sweep_render(uint8_t led_min, uint8_t led_max, uint32_t now);
 static void     mode_sweep_start(int8_t dir);
 static void     mode_sweep_commit(void);
-static uint16_t calc_sweep_front_pos(uint32_t elapsed);
 #endif
 
 #if defined(M87_RGB_INERTIA_ENABLE)
@@ -230,7 +233,6 @@ void hfd_anim_init(void) {
 
 void hfd_anim_task(void) {
     update_hardware_indicators();
-
 #if defined(M87_ANY_KEY_ANIM_ENABLE)
     switch (anim_state) {
 #    if defined(M87_WAVE_F8_ENABLE)
@@ -260,10 +262,8 @@ void hfd_anim_task(void) {
             if (elapsed >= SWEEP_DURATION_TOTAL) {
                 mode_sweep_commit();
                 anim_state = ANIM_NONE;
-            } else if (!mode_sweep_committed && elapsed >= 250) {
-                if (calc_sweep_front_pos(elapsed) >= 240) {
-                    mode_sweep_commit();
-                }
+            } else if (!mode_sweep_committed && elapsed >= SWEEP_HALF_MS) {
+                mode_sweep_commit();
             }
             break;
         }
@@ -450,6 +450,15 @@ bool hfd_anim_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
 #endif
 
     if (soft_off_active) {
+#if defined(RGB_MATRIX_ENABLE)
+        for (uint8_t i = led_min; i < led_max; i++) {
+            rgb_matrix_set_color(i, 0, 0, 0);
+        }
+#endif
+        return true;
+    }
+
+    if (wireless_eco_enabled && (ch582f_get_mode() != M87_WIRED_MODE) && last_input_activity_elapsed() > ((uint32_t)wireless_eco_mins * 60000u)) {
 #if defined(RGB_MATRIX_ENABLE)
         for (uint8_t i = led_min; i < led_max; i++) {
             rgb_matrix_set_color(i, 0, 0, 0);
@@ -832,48 +841,29 @@ static bool mode_sweep_render(uint8_t led_min, uint8_t led_max, uint32_t now) {
         return false;
     }
 
-    uint16_t front_pos = calc_sweep_front_pos(elapsed);
-    if (front_pos >= 240 && !mode_sweep_committed) {
+    bool sweep_in = (elapsed >= SWEEP_HALF_MS);
+    if (sweep_in && !mode_sweep_committed) {
         mode_sweep_commit();
     }
 
-    uint8_t max_val = rgb_matrix_get_val();
-    if (max_val < 130) {
-        max_val = 130;
+    uint16_t phase_ms = sweep_in ? (elapsed - SWEEP_HALF_MS) : elapsed;
+    uint8_t  t        = (uint8_t)((phase_ms * 171u) >> 8);
+    uint16_t ease;
+    if (sweep_in) {
+        uint16_t inv_t    = 255 - t;
+        uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);
+        ease              = (t + ease_out) >> 1;
+    } else {
+        uint16_t ease_in = ((uint16_t)t * t) >> 8;
+        ease             = (t + ease_in) >> 1;
     }
+    uint16_t wipe_pos = ((uint32_t)ease * 245u) >> 8;
 
     for (uint8_t i = led_min; i < led_max; i++) {
         uint8_t d = (mode_sweep_dir >= 0) ? led_dist_grave[i] : (uint8_t)(240 - led_dist_grave[i]);
-
-        if (front_pos < d) {
-            continue;
+        if (sweep_in ? (d >= wipe_pos) : (d < wipe_pos)) {
+            rgb_matrix_set_color(i, 0, 0, 0);
         }
-
-        uint16_t dist_from_front = front_pos - d;
-        if (dist_from_front >= 256) {
-            continue;
-        }
-
-        uint8_t pos = (uint8_t)dist_from_front;
-        uint8_t intensity;
-
-        if (pos < 56) {
-            intensity = (uint8_t)((pos << 2) + (pos >> 1));
-        } else {
-            uint16_t rem = 255 - pos;
-            uint16_t u   = ((uint16_t)rem * 328) >> 8;
-            intensity    = (uint8_t)((u * u) >> 8);
-        }
-
-        if (intensity < 6) {
-            continue;
-        }
-
-        uint8_t b = (uint8_t)(((uint16_t)intensity * max_val) >> 8);
-        uint8_t g = (intensity > 36)  ? (uint8_t)(((uint16_t)(intensity - 36) * max_val) >> 8)  : (b >> 2);
-        uint8_t r = (intensity > 140) ? (uint8_t)(((uint16_t)(intensity - 140) * max_val) >> 7) : (b >> 2);
-
-        rgb_matrix_set_color(i, r, g, b);
     }
     return true;
 }
@@ -988,16 +978,6 @@ static void mode_sweep_commit(void) {
     }
 }
 
-static uint16_t calc_sweep_front_pos(uint32_t elapsed) {
-    uint16_t t = (uint16_t)(((uint32_t)elapsed * 409) >> 10);
-    if (t > 255) {
-        t = 255;
-    }
-    uint16_t inv_t    = 255 - t;
-    uint16_t ease_out = 255 - ((inv_t * inv_t) >> 8);
-    uint16_t progress = (t + ease_out) >> 1;
-    return ((uint32_t)progress * 496) >> 8;
-}
 #endif
 
 #if defined(M87_RGB_INERTIA_ENABLE)
@@ -1050,24 +1030,111 @@ static uint8_t step_toward_u8(uint8_t cur, uint8_t target, uint8_t step) {
 
 static void load_led_strip_settings(void) {
     if (eeconfig_is_enabled()) {
-        uint32_t cfg      = eeconfig_read_kb();
-        sidelight_enabled = !(cfg & LED_CFG_SIDELIGHT);
-        lightbar_enabled  = !(cfg & LED_CFG_LIGHTBAR);
-        keylight_enabled  = !(cfg & LED_CFG_KEYLIGHT);
+        uint32_t cfg         = eeconfig_read_kb();
+        sidelight_enabled    = !(cfg & LED_CFG_SIDELIGHT);
+        lightbar_enabled     = !(cfg & LED_CFG_LIGHTBAR);
+        keylight_enabled     = !(cfg & LED_CFG_KEYLIGHT);
+        wireless_eco_enabled = !(cfg & LED_CFG_WIRELESS_ECO);
+        uint8_t mins         = (uint8_t)((cfg >> LED_CFG_ECO_MIN_SHIFT) & 0xFFu);
+        wireless_eco_mins    = (mins >= 1 && mins <= 10) ? mins : 2;
     }
 }
 
 static void save_led_strip_settings(void) {
     if (eeconfig_is_enabled()) {
         uint32_t old_cfg = eeconfig_read_kb();
-        uint32_t cfg     = old_cfg & ~LED_CFG_MASK;
+        uint32_t cfg     = old_cfg & ~(LED_CFG_MASK | LED_CFG_ECO_MIN_MASK);
 
-        if (!sidelight_enabled) cfg |= LED_CFG_SIDELIGHT;
-        if (!lightbar_enabled)  cfg |= LED_CFG_LIGHTBAR;
-        if (!keylight_enabled)  cfg |= LED_CFG_KEYLIGHT;
-
+        if (!sidelight_enabled)    cfg |= LED_CFG_SIDELIGHT;
+        if (!lightbar_enabled)     cfg |= LED_CFG_LIGHTBAR;
+        if (!keylight_enabled)     cfg |= LED_CFG_KEYLIGHT;
+        if (!wireless_eco_enabled) cfg |= LED_CFG_WIRELESS_ECO;
+        cfg |= ((uint32_t)wireless_eco_mins << LED_CFG_ECO_MIN_SHIFT);
         if (cfg != old_cfg) {
             eeconfig_update_kb(cfg);
         }
     }
 }
+
+#if defined(VIA_ENABLE)
+enum {
+    M87_VIA_KEYLIGHT = 1,
+    M87_VIA_SIDELIGHT,
+    M87_VIA_LIGHTBAR,
+    M87_VIA_WIRELESS_ECO,
+    M87_VIA_AUTOSHIFT_ENABLE,
+    M87_VIA_AUTOSHIFT_TIMEOUT,
+    M87_VIA_WIRELESS_TIMEOUT
+};
+
+void via_custom_value_command_kb(uint8_t *data, uint8_t length) {
+    (void)length;
+    uint8_t *command_id = &(data[0]);
+    uint8_t  channel_id = data[1];
+    uint8_t  value_id   = data[2];
+    uint8_t *value_data = &(data[3]);
+
+    if (channel_id != id_custom_channel) {
+        *command_id = id_unhandled;
+        return;
+    }
+
+    switch (*command_id) {
+        case id_custom_get_value:
+            switch (value_id) {
+                case M87_VIA_KEYLIGHT:          value_data[0] = keylight_enabled ? 1 : 0; break;
+                case M87_VIA_SIDELIGHT:         value_data[0] = sidelight_enabled ? 1 : 0; break;
+                case M87_VIA_LIGHTBAR:          value_data[0] = lightbar_enabled ? 1 : 0; break;
+                case M87_VIA_WIRELESS_ECO:      value_data[0] = wireless_eco_enabled ? 1 : 0; break;
+#    if defined(AUTO_SHIFT_ENABLE)
+                case M87_VIA_AUTOSHIFT_ENABLE:  value_data[0] = get_autoshift_state() ? 1 : 0; break;
+                case M87_VIA_AUTOSHIFT_TIMEOUT: {
+                    uint16_t t = get_generic_autoshift_timeout();
+                    value_data[0] = (t > 255) ? 255 : (uint8_t)t;
+                    break;
+                }
+#    endif
+                case M87_VIA_WIRELESS_TIMEOUT:  value_data[0] = wireless_eco_mins; break;
+                default:
+                    *command_id = id_unhandled;
+                    break;
+            }
+            break;
+
+        case id_custom_set_value:
+            switch (value_id) {
+                case M87_VIA_KEYLIGHT:          keylight_enabled     = (value_data[0] != 0); break;
+                case M87_VIA_SIDELIGHT:         sidelight_enabled    = (value_data[0] != 0); break;
+                case M87_VIA_LIGHTBAR:          lightbar_enabled     = (value_data[0] != 0); break;
+                case M87_VIA_WIRELESS_ECO:      wireless_eco_enabled = (value_data[0] != 0); break;
+#    if defined(AUTO_SHIFT_ENABLE)
+                case M87_VIA_AUTOSHIFT_ENABLE:
+                    if (value_data[0]) {
+                        autoshift_enable();
+                    } else {
+                        autoshift_disable();
+                    }
+                    break;
+                case M87_VIA_AUTOSHIFT_TIMEOUT:
+                    set_autoshift_timeout((value_data[0] < 80) ? 80 : value_data[0]);
+                    break;
+#    endif
+                case M87_VIA_WIRELESS_TIMEOUT:
+                    wireless_eco_mins = (value_data[0] < 1) ? 1 : ((value_data[0] > 10) ? 10 : value_data[0]);
+                    break;
+                default:
+                    *command_id = id_unhandled;
+                    break;
+            }
+            break;
+
+        case id_custom_save:
+            save_led_strip_settings();
+            break;
+
+        default:
+            *command_id = id_unhandled;
+            break;
+    }
+}
+#endif

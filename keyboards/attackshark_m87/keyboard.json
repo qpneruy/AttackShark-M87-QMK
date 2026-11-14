@@ -2,7 +2,7 @@
     "manufacturer": "HuuTinh",
     "keyboard_name": "AttackShark M87",
     "maintainer": "qpneruy",
-    "debounce": 20,
+    "debounce": 8,
     "development_board": "sn32f240b_shared_matrix",
     "diode_direction": "COL2ROW",
     "features": {
@@ -18,8 +18,12 @@
     },
     "rgb_matrix": {
         "animations": {
+            "aurora_borealis": true,
             "cycle_up_down": true,
+            "ember_fire": true,
             "hue_wave": true,
+            "meteor_shower": true,
+            "plasma_lava": true,
             "rainbow_moving_chevron": true,
             "riverflow": true,
             "solid_color": true,

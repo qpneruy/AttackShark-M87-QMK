@@ -285,40 +285,56 @@
                   4
                 ],
                 [
-                  "Typing Heatmap",
+                  "Supernova Scintillation",
                   5
                 ],
                 [
-                  "Supernova Scintillation",
+                  "Starlight Smooth (Dual Hue)",
                   6
                 ],
                 [
-                  "Solid Reactive Simple",
+                  "Riverflow",
                   7
                 ],
                 [
-                  "Solid Reactive",
+                  "Aurora Borealis",
                   8
                 ],
                 [
-                  "Solid Reactive Multiwide",
+                  "Plasma Lava",
                   9
                 ],
                 [
-                  "Solid Reactive Multinexus",
+                  "Ember Fire",
                   10
                 ],
                 [
-                  "Solid Multisplash",
+                  "Meteor Shower",
                   11
                 ],
                 [
-                  "Starlight Smooth (Dual Hue)",
+                  "Typing Heatmap",
                   12
                 ],
                 [
-                  "Riverflow",
+                  "Solid Reactive Simple",
                   13
+                ],
+                [
+                  "Solid Reactive",
+                  14
+                ],
+                [
+                  "Solid Reactive Multiwide",
+                  15
+                ],
+                [
+                  "Solid Reactive Multinexus",
+                  16
+                ],
+                [
+                  "Solid Multisplash",
+                  17
                 ]
               ]
             },
@@ -345,6 +361,60 @@
                 3,
                 4
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "M87 Settings",
+      "content": [
+        {
+          "label": "LED Zones & Wireless Eco",
+          "content": [
+            {
+              "label": "Keylight",
+              "type": "toggle",
+              "content": ["id_m87_keylight", 0, 1]
+            },
+            {
+              "label": "Sidelight",
+              "type": "toggle",
+              "content": ["id_m87_sidelight", 0, 2]
+            },
+            {
+              "label": "Logo Lightbar",
+              "type": "toggle",
+              "content": ["id_m87_lightbar", 0, 3]
+            },
+            {
+              "label": "Wireless Battery Saver",
+              "type": "toggle",
+              "content": ["id_m87_wireless_eco", 0, 4]
+            },
+            {
+              "showIf": "{id_m87_wireless_eco} == 1",
+              "label": "Wireless LED Timeout (minutes)",
+              "type": "range",
+              "options": [1, 10],
+              "content": ["id_m87_wireless_timeout", 0, 7]
+            }
+          ]
+        },
+        {
+          "label": "Auto Shift",
+          "content": [
+            {
+              "label": "Enable Auto Shift",
+              "type": "toggle",
+              "content": ["id_m87_autoshift_enable", 0, 5]
+            },
+            {
+              "showIf": "{id_m87_autoshift_enable} == 1",
+              "label": "Auto Shift Timeout (ms)",
+              "type": "range",
+              "options": [80, 255],
+              "content": ["id_m87_autoshift_timeout", 0, 6]
             }
           ]
         }
