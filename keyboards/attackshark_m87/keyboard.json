@@ -121,9 +121,13 @@
             {"matrix": [5, 14], "x": 204, "y": 70, "flags": 4},
             {"matrix": [5, 15], "x": 217, "y": 70, "flags": 4},
             {"matrix": [5, 16], "x": 230, "y": 70, "flags": 4},
-            {"matrix": [4, 14], "x": 204, "y": 58, "flags": 8}
+            {"matrix": [4, 14], "x": 204, "y": 58, "flags": 8},
+            {"matrix": [3, 16], "x": 230, "y": 46, "flags": 4},
+            {"matrix": [4, 16], "x": 230, "y": 58, "flags": 4},
+            {"matrix": [3, 14], "x": 204, "y": 46, "flags": 4},
+            {"matrix": [3, 15], "x": 217, "y": 46, "flags": 4}
         ],
-        "timeout": 300000
+        "timeout": 600000
     },
     "url": "https://attackshark.com",
     "usb": {

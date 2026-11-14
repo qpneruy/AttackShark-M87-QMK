@@ -70,28 +70,32 @@ enum {
 #endif
 
 #if defined(M87_WAVE_F8_ENABLE)
-/* Precomputed distance table from F8 (Index 8) for all 88 LEDs (scaled 0..240) */
-static const uint8_t led_dist_f8[88] = {
+/* Precomputed distance table from F8 (Index 8) for all LEDs (scaled 0..240) */
+static const uint8_t led_dist_f8[RGB_MATRIX_LED_COUNT] = {
     182, 159, 137, 114,  91,  68,  46,  23,   0,  23,  46,  68,  91, 137, 159, 182,
     185, 163, 140, 118,  96,  75,  56,  39,  32,  39,  56,  75,  96, 118, 140, 163, 185,
     193, 172, 151, 130, 111,  93,  78,  67,  63,  64,  78,  93, 111, 130, 151, 172, 193,
     204, 184, 165, 147, 130, 115, 103,  95,  93,  95, 103, 115, 147,
     210, 185, 169, 154, 142, 133, 127, 124, 127, 133, 142, 169, 202,
     240, 223, 208, 163, 163, 170, 181, 193, 208, 223, 240,
-    185
+    185,
+    209, 224,
+    177, 193
 };
 #endif
 
 #if defined(M87_SOFT_OFF_ANIM_ENABLE) || defined(M87_MODE_SWEEP_ENABLE)
-/* Distance table from ` (Index 16) to all 88 LEDs (normalized 0..240) */
-static const uint8_t led_dist_grave[88] = {
+/* Distance table from ` (Index 16) to all LEDs (normalized 0..240) */
+static const uint8_t led_dist_grave[RGB_MATRIX_LED_COUNT] = {
      20,  25,  35,  47,  60,  74,  87, 101, 115, 129, 143, 157, 172, 200, 214, 228,
       0,  14,  28,  43,  57,  71,  85, 100, 114, 128, 142, 156, 171, 185, 199, 213, 227,
      19,  24,  34,  46,  60,  73,  87, 101, 115, 129, 143, 157, 171, 186, 200, 214, 228,
      38,  41,  47,  57,  68,  80,  93, 106, 120, 134, 147, 161, 189,
      57,  61,  67,  75,  84,  94, 106, 118, 131, 144, 157, 184, 212,
      77,  81,  86, 114, 142, 154, 167, 180, 211, 225, 240,
-    212
+    212,
+    232, 236,
+    210, 221
 };
 #endif
 

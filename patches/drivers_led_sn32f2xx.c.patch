@@ -1,5 +1,5 @@
 diff --git a/drivers/led/sn32f2xx.c b/drivers/led/sn32f2xx.c
-index bfd7a3d565..09b4064b83 100644
+index bfd7a3d565..886039e4bb 100644
 --- a/drivers/led/sn32f2xx.c
 +++ b/drivers/led/sn32f2xx.c
 @@ -143,13 +143,8 @@ static void rgb_ch_ctrl(PWMConfig *cfg) {
@@ -75,7 +75,7 @@ index bfd7a3d565..09b4064b83 100644
 +        current_row = 0;
 +    }
 +
-+    // Tính current_row % 3 bằng nhân nghịch đảo (0 phép chia, 4 chu kỳ CPU)
++    // Fast current_row % 3 via reciprocal multiplication
 +    uint8_t row_ch = current_row - (uint8_t)(((uint16_t)(current_row * 86u) >> 8) * 3u);
 +
  #    if defined(SHARED_MATRIX)
@@ -100,7 +100,7 @@ index bfd7a3d565..09b4064b83 100644
      // Disable LED output before scanning the key matrix
      if (current_key_row < ROWS_PER_HAND) {
          shared_matrix_rgb_disable_output();
-@@ -383,47 +400,86 @@ static void update_pwm_channels(PWMDriver *pwmp) {
+@@ -383,47 +400,81 @@ static void update_pwm_channels(PWMDriver *pwmp) {
          shared_matrix_scan_keys(shared_matrix, current_key_row, last_key_row);
  #    endif // SHARED_MATRIX
      }
@@ -178,17 +178,12 @@ index bfd7a3d565..09b4064b83 100644
 +
 +        // 2. Right strip (B9 - Channel 1): Col 16, Red & Green swapped
 +        uint8_t right_idx = row_map[16];
-+        if (current_key_row == 4 || right_idx >= SN32F2XX_LED_COUNT) {
-+            right_idx = (current_key_row == 3) ? g_led_config.matrix_co[3][13] : g_led_config.matrix_co[4][15];
++        if (right_idx >= SN32F2XX_LED_COUNT) {
++            right_idx = 0;
          }
 -#    endif
-+        if (right_idx < SN32F2XX_LED_COUNT) {
-+            RGB r_led = led_state[right_idx];
-+            pwmEnableChannel(pwmp, 1, (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g));
-+        } else {
-+            pwmDisableChannel(pwmp, 1);
-+            SN_GPIO1->BSET = (1u << 9);
-+        }
++        RGB r_led = led_state[right_idx];
++        pwmEnableChannel(pwmp, 1, (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g));
 +    } else {
 +        pwmDisableChannel(pwmp, 22);
 +        pwmDisableChannel(pwmp, 1);
@@ -197,8 +192,8 @@ index bfd7a3d565..09b4064b83 100644
 +
 +    // 3. Logo strip (B11 - Channel 3): Normal RGB
 +    if (lightbar_enabled) {
-+        uint8_t logo_idx = (current_key_row <= 1) ? g_led_config.matrix_co[2][14] :
-+                           ((current_key_row <= 3) ? g_led_config.matrix_co[2][15] : g_led_config.matrix_co[2][16]);
++        uint8_t logo_idx = (current_key_row <= 1) ? g_led_config.matrix_co[3][14] :
++                           ((current_key_row <= 3) ? g_led_config.matrix_co[3][15] : g_led_config.matrix_co[3][16]);
 +        if (logo_idx < SN32F2XX_LED_COUNT) {
 +            RGB lg_led = led_state[logo_idx];
 +            pwmEnableChannel(pwmp, 3, (row_ch == 0) ? lg_led.b : ((row_ch == 1) ? lg_led.g : lg_led.r));
@@ -222,12 +217,12 @@ index bfd7a3d565..09b4064b83 100644
  #    if (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_HIGH)
          gpio_write_pin_high(led_row_pins[current_row]);
  #    elif (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_LOW)
-@@ -581,6 +637,13 @@ void sn32f2xx_init(void) {
+@@ -581,6 +632,13 @@ void sn32f2xx_init(void) {
          gpio_write_pin_high(led_row_pins[x]);
  #endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
      }
 +#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-+    // Kéo High trước khi bật Output để chống nháy sáng (glitch) lúc khởi động
++    // Drive high before output enable to suppress power-on glitch
 +    SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
 +    gpio_set_pin_output_push_pull(B6);
 +    gpio_set_pin_output_push_pull(B9);
