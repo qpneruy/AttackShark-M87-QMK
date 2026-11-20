@@ -15,7 +15,7 @@ The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-ke
 
 * **Primary Keyboard MCU**: **HFD2201KBA** (rebranded **SONiX SN32F248BF**, ARM Cortex-M0 @ 48MHz, 64KB Flash, 8KB SRAM, LQFP-64).
 * **Wireless Coprocessor**: **WCH CH582F** (BLE 5.3 & 2.4GHz RF, interfaced via UART2 @ 115200 bps).
-* **USB Polling Rate**: Native **500Hz (2ms)** configured in the USB descriptor (`bInterval = 2`) for low latency without CPU starvation.
+* **USB Polling Rate**: Native **1000Hz (1ms)** configured in the USB descriptor (`bInterval = 1`) for low latency.
 * **Bootloader**: Hardware masked ROM ISP bootloader (`VID: 0x0C45, PID: 0x7040`).
 * **Normal Operating Mode**: `VID: 0x0C45, PID: 0x8006`.
 
