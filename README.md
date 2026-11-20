@@ -7,17 +7,15 @@
 [![Polling Rate](https://img.shields.io/badge/Polling%20Rate-1000Hz%20(Native)-brightgreen.svg)](#)
 
 A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinmeng M87) mechanical keyboard with full **QMK & VIA support**, **Tri-Mode wireless** (Bluetooth 5.3, 2.4GHz RF, Wired USB), and independent multi-zone RGB lighting.
+
 ---
 
-## Hardware Overview
+## Features
 
-The Xinmeng M87 / Attack Shark M87 is a gasket-mounted, flex-cut ANSI TKL (87-key) mechanical keyboard powered by a dual-MCU architecture:
-
-* **Primary Keyboard MCU**: **HFD2201KBA** (rebranded **SONiX SN32F248BF**, ARM Cortex-M0 @ 48MHz, 64KB Flash, 8KB SRAM, LQFP-64).
-* **Wireless Coprocessor**: **WCH CH582F** (BLE 5.3 & 2.4GHz RF, interfaced via UART2 @ 115200 bps).
-* **USB Polling Rate**: Native **1000Hz (1ms)** configured in the USB descriptor (`bInterval = 1`) for low latency.
-* **Bootloader**: Hardware masked ROM ISP bootloader (`VID: 0x0C45, PID: 0x7040`).
-* **Normal Operating Mode**: `VID: 0x0C45, PID: 0x8006`.
+* **Tri-Mode Connectivity**: Wired USB (native **1000Hz / 1ms** polling, NKRO), 2.4GHz RF, and Bluetooth 5.3 (3 profiles).
+* **VIA v3 Support**: Live key remapping, macros, RGB effects, and custom **M87 Settings** directly via [usevia.app](https://usevia.app).
+* **Multi-Zone RGB Lighting**: Independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
+* **Wireless Power Management**: Configurable wireless idle timeout, soft power-off (`Fn + \``), and 10-level battery indicator on the number row (`Fn + B`).
 
 ---
 
