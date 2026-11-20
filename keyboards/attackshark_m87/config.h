@@ -20,6 +20,6 @@
 #if defined(M87_CUSTOM_ANIMATIONS_ENABLE)
 #    define M87_WAVE_F8_ENABLE
 #    define M87_SOFT_OFF_ANIM_ENABLE
-#    define M87_MODE_SWEEP_ENABLE
+// #    define M87_MODE_SWEEP_ENABLE
 #    define M87_RGB_INERTIA_ENABLE
 #endif

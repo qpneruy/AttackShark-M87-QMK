@@ -2,7 +2,7 @@
     "manufacturer": "HuuTinh",
     "keyboard_name": "AttackShark M87",
     "maintainer": "qpneruy",
-    "debounce": 8,
+    "debounce": 15,
     "development_board": "sn32f240b_shared_matrix",
     "diode_direction": "COL2ROW",
     "features": {
