@@ -291,3 +291,14 @@ echo "options hid_apple fnmode=2" | sudo tee /etc/modprobe.d/hid_apple.conf
 sudo update-initramfs -u
 ```
 *(Automated via `scripts/fix_fkeys.sh`).*
+
+---
+
+## 9. Stock / Manufacturer Firmware Notice
+
+If you need the manufacturer-provided firmware for the keyboard branded as **Xinmeng M87**, please open an Issue or contact the maintainer (**[@qpneruy](https://github.com/qpneruy)**).
+
+> [!WARNING]
+> **Important Disclaimer:**
+> * **Possible PCB Revision Mismatch:** The vendor firmware on hand for the Xinmeng M87 may be built for a **different PCB batch/revision** than the unit documented in this repository.
+> * **Flash Entirely at Your Own Risk:** Flashing firmware from a mismatched PCB revision can cause incorrect key/LED behavior or soft-brick your keyboard. The maintainer assumes no responsibility or liability for any hardware damage, malfunction, or data loss resulting from using vendor-supplied binaries.
