@@ -5,6 +5,7 @@
 #include "ch582f.h"
 #include "hfd2201kba.h"
 #include "hfd_anim.h"
+#include "m87_sleep.h"
 #include "usb_util.h"
 #if defined(VIA_ENABLE)
 #    include "via.h"
@@ -29,6 +30,11 @@ static void update_hardware_indicators(void) {
             SN_GPIO0->BCLR = (1u << PIN_LED_WINLOCK);
         }
     }
+}
+
+void m87_refresh_hardware_indicators(void) {
+    last_led_bits = 0xFF;
+    update_hardware_indicators();
 }
 
 bool m87_eeconfig_update_masked(const uint32_t value, const uint32_t mask) {
@@ -123,6 +129,7 @@ void housekeeping_task_kb(void) {
     }
 
     hfd_anim_task();
+    m87_sleep_task();
 
     housekeeping_task_user();
 }

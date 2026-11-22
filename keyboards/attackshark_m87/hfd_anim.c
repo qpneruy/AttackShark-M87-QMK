@@ -19,8 +19,19 @@
 // 1. CONSTANTS & LOOKUP TABLES
 // ==========================================================================
 
-#define WIRELESS_ECO_DEFAULT_MINS 5
-#define RGB_MODE_COOLDOWN_MS      260
+#define WIRELESS_ECO_DEFAULT_MINS    5
+#define WIRELESS_DISCONNECTED_ECO_MS 25000u
+#define WIRELESS_DISCONNECT_BLINK_MS 6000u
+#define RGB_MODE_COOLDOWN_MS         260
+
+/* Prototypes for feat/ch582f-protocol API */
+extern void last_matrix_activity_trigger(void);
+bool ch582f_is_low_battery(void);
+bool ch582f_is_charging(void);
+
+__attribute__((weak)) bool ch582f_is_low_battery(void) {
+    return false;
+}
 
 #if defined(M87_WAVE_F8_ENABLE)
 #    define WAVE_DURATION_FLASH   256
@@ -56,6 +67,7 @@ volatile uint8_t      m87_led_zone_mask       = M87_ZONE_ALL;
 static bool           wireless_eco_enabled    = true;
 static uint8_t        wireless_eco_mins       = WIRELESS_ECO_DEFAULT_MINS;
 static bool           battery_show_active     = false;
+static bool           was_charging            = false;
 static deferred_token battery_hide_token      = INVALID_DEFERRED_TOKEN;
 static uint32_t       rgb_mode_cooldown_timer = 0;
 
@@ -90,7 +102,7 @@ static uint8_t  step_toward_u8(uint8_t cur, uint8_t target, uint8_t step);
 
 #if defined(RGB_MATRIX_ENABLE)
 static void     render_battery_indicator(uint8_t led_min, uint8_t led_max);
-static void     render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now);
+static void     render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now, bool low_batt, bool eco_sleep);
 #endif
 
 // ==========================================================================
@@ -152,7 +164,25 @@ void m87_set_wireless_eco_mins(const uint8_t mins) {
     wireless_eco_mins = (mins >= 1 && mins <= 10) ? mins : WIRELESS_ECO_DEFAULT_MINS;
 }
 
+bool m87_wireless_eco_active(void) {
+    if (!wireless_eco_enabled || ch582f_get_mode() == M87_WIRED_MODE) {
+        return false;
+    }
+    if (ch582f_is_charging() || ch582f_is_pairing() || battery_show_active || power_on_wave_is_active()) {
+        return false;
+    }
+
+    uint32_t idle_ms = last_input_activity_elapsed();
+    if (ch582f_is_connected()) {
+        return idle_ms >= ((uint32_t)wireless_eco_mins * 60000u);
+    }
+
+    return (idle_ms >= WIRELESS_DISCONNECTED_ECO_MS) &&
+           (timer_elapsed32(ch582f_get_connected_time()) >= WIRELESS_DISCONNECT_BLINK_MS);
+}
+
 void hfd_anim_init(void) {
+    was_charging = ch582f_is_charging();
 #if defined(M87_RGB_INERTIA_ENABLE)
     rgb_inertia_sync();
 #endif
@@ -162,6 +192,12 @@ void hfd_anim_init(void) {
 }
 
 void hfd_anim_task(void) {
+    bool is_charging = ch582f_is_charging();
+    if (was_charging && !is_charging && ch582f_get_mode() != M87_WIRED_MODE) {
+        last_matrix_activity_trigger();
+    }
+    was_charging = is_charging;
+
 #if defined(M87_WAVE_F8_ENABLE)
     if (wave_active && timer_elapsed32(wave_start_time) >= WAVE_DURATION_TOTAL) {
         allow_curtain_reveal = false;
@@ -321,11 +357,12 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
     }
 
     uint32_t now       = timer_read32();
-    bool     eco_sleep = wireless_eco_enabled &&
-                         (ch582f_get_mode() != M87_WIRED_MODE) &&
-                         (last_input_activity_elapsed() > ((uint32_t)wireless_eco_mins * 60000u));
+    bool     eco_sleep = m87_wireless_eco_active();
+    bool     low_batt  = (ch582f_get_mode() != M87_WIRED_MODE) &&
+                         !ch582f_is_charging() &&
+                         ch582f_is_low_battery();
 
-    if (eco_sleep) {
+    if (eco_sleep || low_batt) {
         for (uint8_t i = led_min; i < led_max; i++) {
             rgb_matrix_set_color(i, 0, 0, 0);
         }
@@ -333,11 +370,15 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
         hfd_anim_render(led_min, led_max, now);
     }
 
-    if ((eco_sleep || !hfd_anim_is_running()) && battery_show_active) {
+    if ((eco_sleep || low_batt || !hfd_anim_is_running()) && battery_show_active) {
         render_battery_indicator(led_min, led_max);
     }
 
-    render_wireless_indicator(led_min, led_max, now);
+    render_wireless_indicator(led_min, led_max, now, low_batt, eco_sleep);
+
+    if (low_batt && !eco_sleep && led_min == 0u && led_max > 0u) {
+        rgb_matrix_set_color(0, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
+    }
     return true;
 }
 #endif
@@ -504,7 +545,7 @@ static void render_battery_indicator(uint8_t led_min, uint8_t led_max) {
     }
 }
 
-static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now) {
+static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now, bool low_batt, bool eco_sleep) {
     if (87 < led_min || 87 >= led_max) {
         return;
     }
@@ -540,11 +581,15 @@ static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t
         if (elapsed < 5000) {
             bool on = (now >> 9) & 1;
             rgb_matrix_set_color(87, on ? r : 0, on ? g : 0, on ? b : 0);
-        } else {
-            rgb_matrix_set_color(87, 0, 0, 0);
+            return;
         }
     } else if (elapsed < 2000) {
         rgb_matrix_set_color(87, r, g, b);
+        return;
+    }
+
+    if (low_batt && !eco_sleep) {
+        rgb_matrix_set_color(87, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
     } else {
         rgb_matrix_set_color(87, 0, 0, 0);
     }
