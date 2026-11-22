@@ -319,7 +319,6 @@ void ch582f_cancel_press(void) {
 void ch582f_set_bt_profile(const bt_profile_t profile) {
     cancel_boot_init();
     cancel_pairing_timers();
-    ch582f_wake_if_needed();
 
     bt_profile                        = profile;
     ch582f_state.is_pairing           = false;
@@ -329,6 +328,7 @@ void ch582f_set_bt_profile(const bt_profile_t profile) {
     m87_eeconfig_update_masked(profile, M87_EECFG_BT_PRF_MASK);
 
     if (conn_mode == M87_BT_MODE) {
+        ch582f_wake_if_needed();
         ch582f_send_sys_cmd((uint8_t)(CH582F_CTRL_MODE_BT_BASE + profile + 1));
         last_tx_time          = timer_read32();
         ch582f_state.sleeping = false;
@@ -582,11 +582,7 @@ static void ch582f_send_keyboard(report_keyboard_t *report) {
 }
 
 static void ch582f_wake_if_needed(void) {
-    if (conn_mode == M87_WIRED_MODE) {
-        return;
-    }
-
-    // Unchanged, hardware-proven: re-wake after 2s of TX silence; 4ms settle so the first report isn't lost.
+    // Stock ROM 0x41D2..0x4204 wakes unconditionally before any 0xA6/HID TX; HID callers guard wired mode.
     if (ch582f_state.sleeping || (last_tx_time != 0 && timer_elapsed32(last_tx_time) >= 2000)) {
         ch582f_send_sys_cmd(CH582F_CTRL_WAKEUP);
         wait_ms(4);
