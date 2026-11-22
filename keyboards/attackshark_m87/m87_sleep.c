@@ -30,19 +30,7 @@
 #define M87_SWITCH_P0_MASK           ((1u << PIN_SWITCH_24G) | (1u << PIN_SWITCH_BT))
 #define M87_WAKE_P0_MASK             ((1u << PIN_VBUS) | M87_SWITCH_P0_MASK)
 
-/* Prototypes for feat/ch582f-protocol API; weak stubs below are GC'd at link time once merged. */
 extern void last_matrix_activity_trigger(void);
-bool ch582f_is_charging(void);
-void ch582f_prepare_sleep(void);
-void ch582f_on_wakeup(void);
-
-__attribute__((weak)) bool ch582f_is_charging(void) {
-    return (SN_GPIO0->DATA & (1u << PIN_VBUS)) != 0u;
-}
-
-__attribute__((weak)) void ch582f_prepare_sleep(void) {}
-
-__attribute__((weak)) void ch582f_on_wakeup(void) {}
 
 OSAL_IRQ_HANDLER(SN32_GPIOA_HANDLER) {
     OSAL_IRQ_PROLOGUE();

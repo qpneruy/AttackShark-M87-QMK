@@ -24,14 +24,7 @@
 #define WIRELESS_DISCONNECT_BLINK_MS 6000u
 #define RGB_MODE_COOLDOWN_MS         260
 
-/* Prototypes for feat/ch582f-protocol API */
 extern void last_matrix_activity_trigger(void);
-bool ch582f_is_low_battery(void);
-bool ch582f_is_charging(void);
-
-__attribute__((weak)) bool ch582f_is_low_battery(void) {
-    return false;
-}
 
 #if defined(M87_WAVE_F8_ENABLE)
 #    define WAVE_DURATION_FLASH   256

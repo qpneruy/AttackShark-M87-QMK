@@ -58,7 +58,10 @@ void uart2_wait_tx_idle(void) {
 // Drops RX FIFO contents and any partially parsed frame.
 void uart2_flush_rx(void) {
     SN_UART2->FIFOCTRL = 0x07;
-    rx_idx             = 0;
+    for (uint8_t n = 0; n < 16u && (SN_UART2->LS & UART_LS_RDR); n++) {
+        (void)SN_UART2->RB;
+    }
+    rx_idx = 0;
 }
 
 static bool uart2_read_byte_fast(uint8_t *b) {

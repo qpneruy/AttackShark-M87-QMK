@@ -207,7 +207,7 @@ Communication between the main keyboard controller and the WCH CH582F wireless c
    SN_UART2->DLM = 0;
    SN_UART2->DLL = 26;   // 48 MHz / (16 * 26) = 115,200 bps (8-N-1)
    SN_UART2->LC = 0x03;  // 8-N-1
-   SN_UART2->FIFOCTRL = 0x07; // Enable & reset 16-byte FIFO
+   SN_UART2->FIFOCTRL = 0x07; // Enable UART FIFO (1-byte RX trigger RXTL=00; bits 5:1 reserved on SN32F240B)
    SN_UART2->CTRL = 0xC1;     // Enable UART, RX, and TX
    ```
 
@@ -222,12 +222,14 @@ checksum = (Byte[0] + Byte[1] + ... + Byte[N-2]) & 0xFF;
 
 | Opcode | Length | Description | Payload Structure |
 | :---: | :---: | :--- | :--- |
-| **`0xA1`** | 10 B | 6KRO Standard Report | `[0xA1, Modifier, 0x00, Key1..Key6, Checksum]` |
-| **`0xA2`** | 16 B | NKRO Bitmap Report | `[0xA2, Bitmap[0]..Bitmap[13], Checksum]` |
+| **`0xA1`** | 10 B | 6KRO / Modifiers Report | `[0xA1, Modifier, 0x00, Key1..Key6, Checksum]` (modifiers + keys ≥ `0x70`) |
+| **`0xA2`** | 16 B | NKRO Bitmap Report | `[0xA2, Bitmap[0]..Bitmap[13], Checksum]` (112-bit HID usages `0x00..0x6F`, no modifier byte) |
 | **`0xA3`** | 4 B | Consumer Media Key | `[0xA3, Usage_LSB, Usage_MSB, Checksum]` |
+| **`0xA4`** | 3 B | System Control Key | `[0xA4, Bitmask, Checksum]` (bit 0 = Power Down `0x81`, bit 1 = Sleep `0x82`, bit 2 = Wake `0x83`) |
 | **`0xA5`** | 3 B | OS Mode Select | `[0xA5, 0x10, 0xB5]` (Windows PC Mode) / `[0xA5, 0x00, 0xA5]` (Mac Mode) |
 | **`0xAD`** | 6 B | Set USB VID/PID | `[0xAD, VID_L, VID_H, PID_L, PID_H, Checksum]` (`0x0C45 / 0x8006`) |
 | **`0xA9`** | Dynamic | Set BLE Device Name | `[0xA9, Length, Name_Bytes..., Checksum]` (`"M87 Keyboard"`) |
+| **`0xA6`** | 3 B | CH582F Wakeup | `[0xA6, 0x00, 0xA6]` |
 | **`0xA6`** | 3 B | Select BT Profile 1 | `[0xA6, 0x31 ('1'), 0xD7]` |
 | **`0xA6`** | 3 B | Select BT Profile 2 | `[0xA6, 0x32 ('2'), 0xD8]` |
 | **`0xA6`** | 3 B | Select BT Profile 3 | `[0xA6, 0x33 ('3'), 0xD9]` |
@@ -235,15 +237,19 @@ checksum = (Byte[0] + Byte[1] + ... + Byte[N-2]) & 0xFF;
 | **`0xA6`** | 3 B | Switch to Wired Mode | `[0xA6, 0x11, 0xB7]` |
 | **`0xA6`** | 3 B | Initiate BLE Pairing | `[0xA6, 0x51, 0xF7]` |
 | **`0xA6`** | 3 B | Poll Battery Level | `[0xA6, 0x53 ('S'), 0xF9]` |
+| **`0xAB`** | 5 B | 2.4G Sleep / Wake Notify | `[0xAB, 0xA6, 0xFE, 0x02, 0x51]` (Sleep) / `[0xAB, 0xA6, 0xFF, 0x01, 0x51]` (Wake) |
 | **`0x61`** | 3 B | Handshake ACK | `[0x61, 0x0D, 0x0A]` (`"a\r\n"`) |
 
 ### 5.4. RX Reports (CH582F -> SN32F248B)
 
 | Header | Param | Description | Meaning |
 | :---: | :---: | :--- | :--- |
-| **`0x5B` (`'['`)** | `0x32` / `0x43` | Link Connected | Host device successfully connected |
+| **`0x5B` (`'['`)** | `0x32` | Link Connected | Host device successfully connected |
 | **`0x5B` (`'['`)** | `0x31` | Link Pairing | Module in pairing discovery state |
-| **`0x5B` (`'['`)** | `0x33` / `0x42` | Link Disconnected | Host connection lost |
+| **`0x5B` (`'['`)** | `0x33` | Link Disconnected / Sleep | Host connection lost; CH582F enters sleep |
+| **`0x5B` (`'['`)** | `0x42` | Module Awake | CH582F woke from sleep (no ACK expected) |
+| **`0x5B` (`'['`)** | `0x43` | Ignored Status | Ignored per stock ROM (`0x43F8..0x4402`; no ACK expected) |
+| **`0x5B` (`'['`)** | `0x21` / `0x22` / `0x23` | Battery State Flag | `0x21` = Low Battery alert on; `0x22` (Critical) / `0x23` (OK) = alert off |
 | **`0x5A` (`'Z'`)** | `0x00 .. 0x07` | Host LED State | Bit 0 = NumLock, Bit 1 = CapsLock, Bit 2 = ScrollLock |
 | **`0x5C` (`'\'`)** | `0x00 .. 0x64` | Battery Level | Current charge percentage (0% to 100%) |
 | **`0x61` (`'a'`)** | `0x0D, 0x0A` | Module ACK | Confirms successful command execution |
@@ -261,6 +267,11 @@ The 3-position physical slide switch connects directly to Port 0 input pins with
 | **Left (BT)** | **Low (`0`)** | High (`1`) | **Bluetooth Mode** (CH582F BLE active) |
 | **Center (OFF/Wired)** | High (`1`) | High (`1`) | **Wired USB Mode** (battery isolated when unplugged) |
 | **Right (2.4G)** | High (`1`) | **Low (`0`)** | **2.4GHz RF Mode** (CH582F RF active) |
+
+### 6.1. Wireless Deep-Sleep & VBUS Charging (`SN_PMU->CTRL = 2`)
+* **Trigger**: Wireless mode (`BT` or `2.4G`) when USB VBUS (`P0.2`) is `0` (not charging), triggered after the configured VIA timeout when connected or **25 seconds** when disconnected (`WIRELESS_DISCONNECTED_ECO_MS`).
+* **Entry (`m87_sleep.c`)**: Sends 2.4G sleep notify (`0xAB 0xA6 0xFE 0x02 0x51`) if connected in 2.4G, disables `CT16B1` PWM & LEDs, drives matrix columns/strips high and sets rows `P3.6..P3.11` floating input (`CFG = 0x00AAA000`), arms both-edge wakeup IRQs on `GPIO3` (`P3.6..P3.11`, `VectorB0`) and `GPIO0` (`P0.2`/`P0.6`/`P0.7`, `VectorBC`), freezes ChibiOS `CT16B0`/`SysTick`, suspends USB PHY, downshifts clock to ILRC/4 (8kHz) with `SN_FLASH->LPCTRL = 0x5AFA0002`, and executes `SN_PMU->CTRL = 2` + `__WFI()`.
+* **Wakeup**: Any keypress, USB cable plug-in (`P0.2`), or slide-switch change restores Flash wait-states + 48MHz IHRC, USB registers, `CT16B0`/`SysTick`, QMK matrix pin states, and `CT16B1` PWM, resets the inactivity timer, and sends the 2.4G wakeup notify (`0xAB 0xA6 0xFF 0x01 0x51`).
 
 ---
 
