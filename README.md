@@ -12,10 +12,10 @@ A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinm
 
 ## Features
 
-* **Tri-Mode Connectivity**: Wired USB (native **1000Hz / 1ms** polling, NKRO), 2.4GHz RF, and Bluetooth 5.3 (3 profiles).
+* **Tri-Mode Connectivity**: Full **NKRO** across Wired USB (native **1000Hz / 1ms** polling), 2.4GHz RF, and Bluetooth 5.3 (3 profiles), plus System Power/Sleep/Wake keys over wireless.
 * **VIA v3 Support**: Live key remapping, macros, RGB effects, and custom **M87 Settings** directly via [usevia.app](https://usevia.app).
 * **Multi-Zone RGB Lighting**: 24 RGB effects (18 built-in + 6 custom), smooth in-RAM tuning, and independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
-* **Wireless Power Management**: Configurable wireless idle timeout (5-minute default, 1–10 min in VIA) and 10-level battery indicator on the number row (`Fn + Alt`).
+* **Wireless Power Management**: Hardware `SN_PMU` Deep-Sleep with instant keypress/VBUS/switch wakeup, USB VBUS charging detection, 25s disconnected sleep timeout, configurable 1–10 min connected timeout (5-min default in VIA), CH582F low-battery alert, and 10-level battery indicator (`Fn + Alt`).
 
 ---
 
@@ -54,7 +54,7 @@ Flashing is performed using **[Sonix Flasher](https://github.com/SonixQMK/SonixF
 > 📥 **Ready-to-flash binaries**: Download pre-compiled `.bin` files and VIA definition directly from the **[Latest Release](https://github.com/qpneruy/AttackShark-M87-QMK/releases/latest)**.
 ### 1. Put the Keyboard into Bootloader Mode
 
-If this QMK firmware is already flashed, simply press **`Fn + Esc`** (or hold **`Esc`** while plugging in the USB cable via Bootmagic) to enter Bootloader mode without opening the case.
+If this QMK firmware is already flashed, simply press **`Fn + Esc`** to enter Bootloader mode without opening the case.
 
 For a stock keyboard, the Sonix SN32F248B can be put into Bootloader mode by shorting the **BOOT** pin to ground (GND) before powering the board.
 

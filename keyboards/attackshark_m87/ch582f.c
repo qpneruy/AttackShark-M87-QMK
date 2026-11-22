@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "ch582f.h"
+#include <string.h>
 #include "ch582f_protocol.h"
 #include "ch582f_uart.h"
 #include "deferred_exec.h"
 #include "host.h"
 #include "keycode_config.h"
+
+// Raw 8-byte 0xA1 payload is copied straight out of report_keyboard_t.
+_Static_assert(sizeof(report_keyboard_t) == 8, "report_keyboard_t must not carry a report_id");
 
 extern void last_matrix_activity_trigger(void);
 
@@ -16,6 +20,7 @@ static struct {
     uint8_t  battery_percent;
     bool     is_connected;
     bool     is_pairing;
+    bool     low_battery;
     uint32_t wireless_state_timer;
 } ch582f_state = {
     .battery_percent = 100
@@ -27,6 +32,7 @@ static bt_profile_t         bt_profile            = M87_BT_PRF_1;
 
 static uint32_t             last_tx_time          = 0;
 static uint64_t             last_keyboard_rep     = UINT64_MAX;
+static uint8_t              last_nkro_bits[CH582F_NKRO_BYTES];
 
 static uint8_t              boot_init_state       = 0;
 static connect_mode_t       last_sw_mode          = M87_WIRED_MODE;
@@ -51,14 +57,19 @@ static const uint8_t win_pkt[] = {
     (uint8_t)(CH582F_CMD_OS_MODE + CH582F_OS_WINDOWS)
 };
 static const uint8_t pair_pkt[] = {
-    CH582F_CMD_SYSTEM,
-    CH582F_SYS_PAIRING_START,
-    (uint8_t)(CH582F_CMD_SYSTEM + CH582F_SYS_PAIRING_START)
+    CH582F_CMD_CONTROL,
+    CH582F_CTRL_PAIRING_START,
+    (uint8_t)(CH582F_CMD_CONTROL + CH582F_CTRL_PAIRING_START)
 };
+// 0xAB payloads (stock ROM 0x027C / 0x0324), sent only in 2.4G mode while connected.
+static const uint8_t notify_24g_sleep[] = {CH582F_CMD_CONTROL, 0xFE, 0x02};
+static const uint8_t notify_24g_wake[]  = {CH582F_CMD_CONTROL, 0xFF, 0x01};
 
 static void           ch582f_transport_mode(connect_mode_t n_mode);
 static void           cancel_boot_init(void);
 static void           cancel_pairing_timers(void);
+static void           ch582f_write_frame(uint8_t cmd, const uint8_t *data, uint8_t len);
+static void           ch582f_send_report(uint8_t cmd, const uint8_t *data, uint8_t len);
 static void           ch582f_send_sys_cmd(uint8_t code);
 static void           ch582f_handle_rx_packet(uint8_t header, uint8_t param, bool is_ack);
 
@@ -70,7 +81,6 @@ static void           ch582f_driver_send_extra(report_extra_t *report);
 static void           ch582f_driver_send_raw_hid(uint8_t *data, uint8_t length);
 
 static void           ch582f_send_keyboard(report_keyboard_t *report);
-static void           ch582f_send_consumer(uint16_t usage);
 static void           ch582f_wake_if_needed(void);
 
 static connect_mode_t get_hardware_switch_mode(void);
@@ -84,9 +94,29 @@ static const host_driver_t ch582f_host_driver = {
     .send_raw_hid  = ch582f_driver_send_raw_hid
 };
 
+// [cmd, data..., (uint8_t)(cmd + sum(data))]
+static void ch582f_write_frame(const uint8_t cmd, const uint8_t *data, const uint8_t len) {
+    uint8_t sum = cmd;
+    uart2_write_byte_fast(cmd);
+    for (uint8_t i = 0; i < len; i++) {
+        sum += data[i];
+        uart2_write_byte_fast(data[i]);
+    }
+    uart2_write_byte_fast(sum);
+}
+
+// HID report path: wireless only, wakes the CH582F first.
+static void ch582f_send_report(const uint8_t cmd, const uint8_t *data, const uint8_t len) {
+    if (conn_mode == M87_WIRED_MODE) {
+        return;
+    }
+    ch582f_wake_if_needed();
+    ch582f_write_frame(cmd, data, len);
+    last_tx_time = timer_read32();
+}
+
 static void ch582f_send_sys_cmd(const uint8_t code) {
-    uint8_t pkt[3] = {CH582F_CMD_SYSTEM, code, (uint8_t)(CH582F_CMD_SYSTEM + code)};
-    uart2_write_buf_fast(pkt, sizeof(pkt));
+    ch582f_write_frame(CH582F_CMD_CONTROL, &code, 1);
 }
 
 static uint32_t boot_init_callback(uint32_t trigger_time, void *cb_arg) {
@@ -104,9 +134,9 @@ static uint32_t boot_init_callback(uint32_t trigger_time, void *cb_arg) {
             uart2_write_buf_fast(win_pkt, sizeof(win_pkt));
             return 10;
         default: {
-            uint8_t code = (conn_mode == M87_WIRED_MODE) ? CH582F_SYS_MODE_WIRED :
-                           (conn_mode == M87_24G_MODE)   ? CH582F_SYS_MODE_24G :
-                                                           (uint8_t)(CH582F_SYS_MODE_BT_BASE + (uint8_t)bt_profile + 1);
+            uint8_t code = (conn_mode == M87_WIRED_MODE) ? CH582F_CTRL_MODE_WIRED :
+                           (conn_mode == M87_24G_MODE)   ? CH582F_CTRL_MODE_24G :
+                                                           (uint8_t)(CH582F_CTRL_MODE_BT_BASE + (uint8_t)bt_profile + 1);
             ch582f_send_sys_cmd(code);
             boot_init_token = INVALID_DEFERRED_TOKEN;
             return 0;
@@ -142,7 +172,7 @@ static uint32_t pairing_seq_callback(uint32_t trigger_time, void *cb_arg) {
             uart2_write_buf_fast(name_pkt, sizeof(name_pkt));
             return 10;
         case 1:
-            ch582f_send_sys_cmd((uint8_t)(CH582F_SYS_MODE_BT_BASE + bt_profile + 1));
+            ch582f_send_sys_cmd((uint8_t)(CH582F_CTRL_MODE_BT_BASE + bt_profile + 1));
             return 20;
         case 2:
             uart2_write_buf_fast(win_pkt, sizeof(win_pkt));
@@ -299,7 +329,7 @@ void ch582f_set_bt_profile(const bt_profile_t profile) {
     m87_eeconfig_update_masked(profile, M87_EECFG_BT_PRF_MASK);
 
     if (conn_mode == M87_BT_MODE) {
-        ch582f_send_sys_cmd((uint8_t)(CH582F_SYS_MODE_BT_BASE + profile + 1));
+        ch582f_send_sys_cmd((uint8_t)(CH582F_CTRL_MODE_BT_BASE + profile + 1));
         last_tx_time          = timer_read32();
         ch582f_state.sleeping = false;
     }
@@ -328,7 +358,7 @@ void ch582f_start_pairing(void) {
 
 void ch582f_poll_battery(void) {
     ch582f_wake_if_needed();
-    ch582f_send_sys_cmd(CH582F_SYS_POLL_BATTERY);
+    ch582f_send_sys_cmd(CH582F_CTRL_POLL_BATTERY);
     last_tx_time = timer_read32();
 }
 
@@ -356,6 +386,30 @@ uint8_t ch582f_get_battery_level(void) {
     return ch582f_state.battery_percent;
 }
 
+bool ch582f_is_low_battery(void) {
+    return ch582f_state.low_battery;
+}
+
+bool ch582f_is_charging(void) {
+    return (SN_GPIO0->DATA & (1u << PIN_VBUS)) != 0;
+}
+
+void ch582f_prepare_sleep(void) {
+    if (conn_mode == M87_24G_MODE && ch582f_state.is_connected) {
+        ch582f_write_frame(CH582F_CMD_24G_NOTIFY, notify_24g_sleep, sizeof(notify_24g_sleep));
+    }
+    uart2_wait_tx_idle();
+    // Forces a wakeup command before the first report after MCU sleep (ST is frozen while asleep).
+    ch582f_state.sleeping = true;
+}
+
+void ch582f_on_wakeup(void) {
+    uart2_flush_rx();
+    if (conn_mode == M87_24G_MODE && ch582f_state.is_connected) {
+        ch582f_write_frame(CH582F_CMD_24G_NOTIFY, notify_24g_wake, sizeof(notify_24g_wake));
+    }
+}
+
 static void ch582f_transport_mode(const connect_mode_t n_mode) {
     clear_keyboard();
     cancel_boot_init();
@@ -370,19 +424,21 @@ static void ch582f_transport_mode(const connect_mode_t n_mode) {
     ch582f_state.wireless_state_timer = timer_read32();
     last_tx_time                      = ch582f_state.wireless_state_timer;
     last_keyboard_rep                 = UINT64_MAX;
+    memset(last_nkro_bits, 0xFF, sizeof(last_nkro_bits));
     last_matrix_activity_trigger();
+
+    // NKRO in all modes: wireless uses 0xA1 (mods) + 0xA2 (bitmap), see ch582f_driver_send_nkro().
+    keymap_config.nkro = true;
 
     uint8_t mode_code;
     if (n_mode == M87_WIRED_MODE) {
-        keymap_config.nkro = true;
         if (default_host_driver) {
             host_set_driver(default_host_driver);
         }
-        mode_code = CH582F_SYS_MODE_WIRED;
+        mode_code = CH582F_CTRL_MODE_WIRED;
     } else {
-        keymap_config.nkro = false;
         host_set_driver((host_driver_t *)&ch582f_host_driver);
-        mode_code = (n_mode == M87_24G_MODE) ? CH582F_SYS_MODE_24G : (uint8_t)(CH582F_SYS_MODE_BT_BASE + (uint8_t)bt_profile + 1);
+        mode_code = (n_mode == M87_24G_MODE) ? CH582F_CTRL_MODE_24G : (uint8_t)(CH582F_CTRL_MODE_BT_BASE + (uint8_t)bt_profile + 1);
     }
 
     ch582f_send_sys_cmd(mode_code);
@@ -394,34 +450,53 @@ static void ch582f_handle_rx_packet(const uint8_t header, const uint8_t param, c
         return;
     }
 
-    // CH582F SLEEP (0x42) and CONNECTED_2 (0x43) status packets do not expect an "a\r\n" ACK.
-    bool is_sleep_pkt = (header == CH582F_RX_HDR_STATUS) &&
-                        (param == CH582F_STATUS_SLEEP || param == CH582F_STATUS_CONNECTED_2);
-    if (!is_sleep_pkt) {
-        static const uint8_t ack_pkt[3] = {CH582F_RX_HDR_ACK, '\r', '\n'};
-        uart2_write_buf_fast(ack_pkt, sizeof(ack_pkt));
+    // Stock ROM 0x43F8..0x442C: these two are handled before the ACK path and never ACKed.
+    if (header == CH582F_RX_HDR_STATUS) {
+        if (param == CH582F_STATUS_IGNORED) {
+            return;
+        }
+        if (param == CH582F_STATUS_AWAKE) {
+            ch582f_state.sleeping = false;
+            return;
+        }
     }
 
+    static const uint8_t ack_pkt[3] = {CH582F_RX_HDR_ACK, '\r', '\n'};
+    uart2_write_buf_fast(ack_pkt, sizeof(ack_pkt));
+
+    // Any frame proves the CH582F is awake, except DISCONNECTED (it sleeps right after).
+    ch582f_state.sleeping = (header == CH582F_RX_HDR_STATUS && param == CH582F_STATUS_DISCONNECTED);
+
     if (header == CH582F_RX_HDR_STATUS) {
-        if (param == CH582F_STATUS_CONNECTED_1 || param == CH582F_STATUS_CONNECTED_2) {
-            if (!ch582f_state.is_connected) {
-                ch582f_state.is_connected         = true;
+        switch (param) {
+            case CH582F_STATUS_LOW_BATTERY:
+                ch582f_state.low_battery = true;
+                break;
+            case CH582F_STATUS_BATTERY_CRITICAL:
+            case CH582F_STATUS_BATTERY_OK:
+                ch582f_state.low_battery = false;
+                break;
+            case CH582F_STATUS_CONNECTED:
+                if (!ch582f_state.is_connected) {
+                    ch582f_state.is_connected         = true;
+                    ch582f_state.wireless_state_timer = timer_read32();
+                }
+                ch582f_state.is_pairing = false;
+                break;
+            case CH582F_STATUS_PAIRING:
+                ch582f_state.is_pairing           = true;
+                ch582f_state.is_connected         = false;
                 ch582f_state.wireless_state_timer = timer_read32();
-            }
-            ch582f_state.is_pairing = false;
-            ch582f_state.sleeping   = false;
-        } else if (param == CH582F_STATUS_PAIRING) {
-            ch582f_state.is_pairing           = true;
-            ch582f_state.is_connected         = false;
-            ch582f_state.wireless_state_timer = timer_read32();
-            ch582f_state.sleeping             = false;
-        } else if (param == CH582F_STATUS_DISCONNECTED || param == CH582F_STATUS_SLEEP) {
-            if (ch582f_state.is_connected) {
-                ch582f_state.wireless_state_timer = timer_read32();
-            }
-            ch582f_state.is_connected = false;
-            ch582f_state.is_pairing   = false;
-            ch582f_state.sleeping     = true;
+                break;
+            case CH582F_STATUS_DISCONNECTED:
+                if (ch582f_state.is_connected) {
+                    ch582f_state.wireless_state_timer = timer_read32();
+                }
+                ch582f_state.is_connected = false;
+                ch582f_state.is_pairing   = false;
+                break;
+            default:
+                break;
         }
     } else if (header == CH582F_RX_HDR_LED) {
         if (param < 8) {
@@ -432,12 +507,8 @@ static void ch582f_handle_rx_packet(const uint8_t header, const uint8_t param, c
             }
             ch582f_state.is_pairing = false;
         }
-        ch582f_state.sleeping = false;
     } else if (header == CH582F_RX_HDR_BATTERY) {
         ch582f_state.battery_percent = (param > 100) ? 100 : param;
-        ch582f_state.sleeping        = false;
-    } else {
-        ch582f_state.sleeping = false;
     }
 }
 
@@ -449,27 +520,26 @@ static void ch582f_driver_send_keyboard(report_keyboard_t *report) {
     ch582f_send_keyboard(report);
 }
 
+// Stock layout: 0xA1 carries mods (here also up to 6 usages >= 0x70 that 0xA2 cannot hold),
+// 0xA2 carries report->bits[0..13] 1:1 (usages 0x00..0x6F).
 static void ch582f_driver_send_nkro(report_nkro_t *report) {
-    report_keyboard_t k_report;
-    k_report.mods     = report->mods;
-    k_report.reserved = 0;
+    if (conn_mode == M87_WIRED_MODE) {
+        return;
+    }
 
-    static const uint8_t ctz_lut[8] = {0, 1, 6, 2, 7, 5, 4, 3};
-
-    uint8_t count = 0;
-    for (uint8_t i = 0; i < sizeof(report->bits) && count < 6; i++) {
-        uint8_t b = report->bits[i];
-        while (b && count < 6) {
-            uint8_t isolated       = b & -b;
-            uint8_t bit            = ctz_lut[((uint8_t)(isolated * 29) >> 5) & 7];
-            k_report.keys[count++] = (i << 3) + bit;
-            b &= (b - 1);
+    report_keyboard_t k_report = {.mods = report->mods};
+    uint8_t           count    = 0;
+    for (uint8_t code = CH582F_NKRO_BYTES * 8; code < NKRO_REPORT_BITS * 8 && count < KEYBOARD_REPORT_KEYS; code++) {
+        if (report->bits[code >> 3] & (1u << (code & 7))) {
+            k_report.keys[count++] = code;
         }
     }
-    while (count < 6) {
-        k_report.keys[count++] = 0;
-    }
     ch582f_send_keyboard(&k_report);
+
+    if (memcmp(last_nkro_bits, report->bits, CH582F_NKRO_BYTES) != 0) {
+        memcpy(last_nkro_bits, report->bits, CH582F_NKRO_BYTES);
+        ch582f_send_report(CH582F_CMD_NKRO_REPORT, report->bits, CH582F_NKRO_BYTES);
+    }
 }
 
 static void ch582f_driver_send_mouse(report_mouse_t *report) {
@@ -478,7 +548,13 @@ static void ch582f_driver_send_mouse(report_mouse_t *report) {
 
 static void ch582f_driver_send_extra(report_extra_t *report) {
     if (report->report_id == REPORT_ID_CONSUMER) {
-        ch582f_send_consumer(report->usage);
+        uint8_t data[2] = {(uint8_t)report->usage, (uint8_t)(report->usage >> 8)};
+        ch582f_send_report(CH582F_CMD_CONSUMER_REPORT, data, sizeof(data));
+    } else if (report->report_id == REPORT_ID_SYSTEM) {
+        // 0x81 power down -> bit0, 0x82 sleep -> bit1, 0x83 wake up -> bit2, release -> 0
+        uint16_t usage = report->usage;
+        uint8_t  mask  = (usage >= SYSTEM_POWER_DOWN && usage <= SYSTEM_WAKE_UP) ? (uint8_t)(1u << (usage - SYSTEM_POWER_DOWN)) : 0;
+        ch582f_send_report(CH582F_CMD_SYSTEM_REPORT, &mask, 1);
     }
 }
 
@@ -502,36 +578,7 @@ static void ch582f_send_keyboard(report_keyboard_t *report) {
     }
     last_keyboard_rep = cur_rep;
 
-    ch582f_wake_if_needed();
-
-    const uint8_t *raw = (const uint8_t *)report;
-    uint8_t        sum = CH582F_CMD_KEYBOARD_REPORT;
-    for (uint8_t i = 0; i < 8; i++) {
-        sum += raw[i];
-    }
-
-    uart2_write_byte_fast(CH582F_CMD_KEYBOARD_REPORT);
-    uart2_write_buf_fast(raw, 8);
-    uart2_write_byte_fast(sum);
-
-    last_tx_time = timer_read32();
-}
-
-static void ch582f_send_consumer(const uint16_t usage) {
-    if (conn_mode == M87_WIRED_MODE) {
-        return;
-    }
-    ch582f_wake_if_needed();
-
-    uint8_t lo = (uint8_t)usage;
-    uint8_t hi = (uint8_t)(usage >> 8);
-
-    uart2_write_byte_fast(CH582F_CMD_CONSUMER_REPORT);
-    uart2_write_byte_fast(lo);
-    uart2_write_byte_fast(hi);
-    uart2_write_byte_fast((uint8_t)(CH582F_CMD_CONSUMER_REPORT + lo + hi));
-
-    last_tx_time = timer_read32();
+    ch582f_send_report(CH582F_CMD_KEYBOARD_REPORT, (const uint8_t *)report, sizeof(*report));
 }
 
 static void ch582f_wake_if_needed(void) {
@@ -539,8 +586,9 @@ static void ch582f_wake_if_needed(void) {
         return;
     }
 
+    // Unchanged, hardware-proven: re-wake after 2s of TX silence; 4ms settle so the first report isn't lost.
     if (ch582f_state.sleeping || (last_tx_time != 0 && timer_elapsed32(last_tx_time) >= 2000)) {
-        ch582f_send_sys_cmd(CH582F_SYS_WAKEUP);
+        ch582f_send_sys_cmd(CH582F_CTRL_WAKEUP);
         wait_ms(4);
         ch582f_state.sleeping = false;
     }

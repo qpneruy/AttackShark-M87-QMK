@@ -33,3 +33,4 @@ enum m87_custom_keycodes {
 bool m87_eeconfig_update_masked(uint32_t value, uint32_t mask);
 void m87_load_settings(void);
 void m87_save_settings(void);
+void m87_refresh_hardware_indicators(void);
