@@ -20,6 +20,7 @@ bool    m87_get_wireless_eco(void);
 void    m87_set_wireless_eco(bool enable);
 uint8_t m87_get_wireless_eco_mins(void);
 void    m87_set_wireless_eco_mins(uint8_t mins);
+bool    m87_wireless_eco_active(void);
 
 #if defined(M87_CUSTOM_ANIMATIONS_ENABLE) && defined(M87_WAVE_F8_ENABLE)
 void power_on_wave_start(void);
