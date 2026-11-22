@@ -5,19 +5,20 @@
 RGB_MATRIX_EFFECT(STARLIGHT_SMOOTH)
 #    ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
 
+static uint8_t phase_offsets[RGB_MATRIX_LED_COUNT];
+
 hsv_t STARLIGHT_SMOOTH_math(hsv_t hsv, uint8_t i, uint8_t time) {
-    // Non-linear S-box hash to prevent diagonal artifacts without SRAM allocation
-    uint8_t phase = sin8(i * 167) ^ (i * 53);
-
-    // Dual-hue color offset (+-16 degrees)
-    hsv.h += (phase >> 3) - 16;
-
-    // Smooth sine wave brightness
-    hsv.v = scale8(abs8(sin8((time + phase) / 2) - 128) * 2, hsv.v);
+    if (phase_offsets[i] == 0) {
+        phase_offsets[i] = random8();
+    }
+    hsv.v = scale8(abs8(sin8((time + phase_offsets[i]) / 2) - 128) * 2, hsv.v);
     return hsv;
 }
 
 bool STARLIGHT_SMOOTH(effect_params_t* params) {
+    if (params->init) {
+        memset(phase_offsets, 0, sizeof(phase_offsets));
+    }
     return effect_runner_i(params, &STARLIGHT_SMOOTH_math);
 }
 

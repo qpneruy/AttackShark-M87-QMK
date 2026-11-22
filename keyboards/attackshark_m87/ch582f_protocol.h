@@ -31,6 +31,3 @@
 #define CH582F_STATUS_CONNECTED_2     0x43
 #define CH582F_STATUS_DISCONNECTED    0x33
 #define CH582F_STATUS_SLEEP           0x42
-
-
-#define BT_PRF_MASK 0x03

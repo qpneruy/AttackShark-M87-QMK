@@ -19,16 +19,6 @@
       "shortName": "BT3"
     },
     {
-      "name": "2.4G Wireless",
-      "title": "M87_24G",
-      "shortName": "2.4G"
-    },
-    {
-      "name": "Battery Status",
-      "title": "M87_BAT",
-      "shortName": "BAT"
-    },
-    {
       "name": "Toggle Sidelight",
       "title": "SIDELIGHT_TOGG",
       "shortName": "SideLT"
@@ -47,11 +37,6 @@
       "name": "Toggle Keylight",
       "title": "KEYLIGHT_TOGG",
       "shortName": "KeyLT"
-    },
-    {
-      "name": "Soft Power Off",
-      "title": "M87_OFF",
-      "shortName": "SoftOff"
     },
     {
       "name": "Save RGB to EEPROM",
@@ -273,43 +258,43 @@
                   1
                 ],
                 [
-                  "Cycle Up Down",
+                  "Gradient Left Right",
                   2
                 ],
                 [
-                  "Rainbow Moving Chevron",
+                  "Breathing",
                   3
                 ],
                 [
-                  "Hue Wave",
+                  "Band Spiral Val",
                   4
                 ],
                 [
-                  "Supernova Scintillation",
+                  "Cycle Up Down",
                   5
                 ],
                 [
-                  "Starlight Smooth (Dual Hue)",
+                  "Rainbow Moving Chevron",
                   6
                 ],
                 [
-                  "Riverflow",
+                  "Cycle Spiral",
                   7
                 ],
                 [
-                  "Aurora Borealis",
+                  "Rainbow Pinwheels",
                   8
                 ],
                 [
-                  "Plasma Lava",
+                  "Flower Blooming",
                   9
                 ],
                 [
-                  "Ember Fire",
+                  "Jellybean Raindrops",
                   10
                 ],
                 [
-                  "Meteor Shower",
+                  "Hue Wave",
                   11
                 ],
                 [
@@ -335,6 +320,34 @@
                 [
                   "Solid Multisplash",
                   17
+                ],
+                [
+                  "Riverflow",
+                  18
+                ],
+                [
+                  "Supernova Scintillation",
+                  19
+                ],
+                [
+                  "Starlight Smooth (Dual Hue)",
+                  20
+                ],
+                [
+                  "Aurora Borealis",
+                  21
+                ],
+                [
+                  "Plasma Lava",
+                  22
+                ],
+                [
+                  "Ember Fire",
+                  23
+                ],
+                [
+                  "Meteor Shower",
+                  24
                 ]
               ]
             },

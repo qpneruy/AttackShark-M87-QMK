@@ -14,8 +14,8 @@ A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinm
 
 * **Tri-Mode Connectivity**: Wired USB (native **1000Hz / 1ms** polling, NKRO), 2.4GHz RF, and Bluetooth 5.3 (3 profiles).
 * **VIA v3 Support**: Live key remapping, macros, RGB effects, and custom **M87 Settings** directly via [usevia.app](https://usevia.app).
-* **Multi-Zone RGB Lighting**: Independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
-* **Wireless Power Management**: Configurable wireless idle timeout, soft power-off (`Fn + \``), and 10-level battery indicator on the number row (`Fn + B`).
+* **Multi-Zone RGB Lighting**: 24 RGB effects (18 built-in + 6 custom), smooth in-RAM tuning, and independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
+* **Wireless Power Management**: Configurable wireless idle timeout (5-minute default, 1–10 min in VIA) and 10-level battery indicator on the number row (`Fn + Alt`).
 
 ---
 
@@ -24,20 +24,18 @@ A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinm
 | Shortcut | Keycode | Function |
 | :--- | :--- | :--- |
 | **`Fn + Esc`** | `QK_BOOT` | Jump into ISP Bootloader mode |
-| **`Fn + \``** | `M87_OFF` | Soft Power-Off / Sleep *(Press again to Wake)* |
-| **`Fn + 1`** | `M87_BT1` | Bluetooth Profile 1 *(Hold 3s to Pair)* |
-| **`Fn + 2`** | `M87_BT2` | Bluetooth Profile 2 *(Hold 3s to Pair)* |
-| **`Fn + 3`** | `M87_BT3` | Bluetooth Profile 3 *(Hold 3s to Pair)* |
-| **`Fn + 4`** | `M87_24G` | 2.4GHz RF Mode *(Hold 3s to Pair)* |
+| **`Fn + 1`** | `M87_BT1` | Bluetooth Profile 1 *(Hold 2s to Pair)* |
+| **`Fn + 2`** | `M87_BT2` | Bluetooth Profile 2 *(Hold 2s to Pair)* |
+| **`Fn + 3`** | `M87_BT3` | Bluetooth Profile 3 *(Hold 2s to Pair)* |
 | **`Fn + Backspace`** | `KEYLIGHT_TOGG` | Toggle 87 Key LEDs |
 | **`Fn + Right Ctrl`** | `SIDELIGHT_TOGG` | Toggle Dual Side RGB Strips |
 | **`Fn + End`** | `LIGHTBAR_TOGG` | Toggle Logo Lightbar |
-| **`Fn + B` / `Fn + Alt`** | `BATTERY_LEVEL` | Display Battery Level on `1..0` Number Row |
+| **`Fn + Alt`** | `BATTERY_LEVEL` | Display Battery Level on `1..0` Number Row |
 | **`Fn + \`** | `RM_NEXT` | Next RGB Matrix effect |
 | **`Fn + Del`** | `RM_HUEU` | Cycle RGB Hue color |
 | **`Fn + Up` / `Fn + Down`** | `RM_VALU / RM_VALD` | Increase / Decrease Brightness |
 | **`Fn + Right`** / **`Fn + Left`** | `RM_SPDU / RM_SPDD` | Increase / Decrease Animation Speed |
-| **`Fn + /`** | `M87_RGB_SAVE` | Explicitly Commit RGB & Strip Settings to Flash/EEPROM |
+| **`Fn + /`** | `M87_RGB_SAVE` | Explicitly Commit RGB, LED Zone, Wireless Eco & Auto Shift Settings to EEPROM |
 | **`Fn + Left Win`** | `GU_TOGG` | Toggle Windows Key Lock |
 | **`Fn + Left Shift`** | `AS_TOGG` | Toggle Auto Shift On / Off |
 | **`Fn + F1 .. F4`** | Shortcuts | My Computer / Web Browser / Calculator / Media Player |
@@ -56,7 +54,9 @@ Flashing is performed using **[Sonix Flasher](https://github.com/SonixQMK/SonixF
 > 📥 **Ready-to-flash binaries**: Download pre-compiled `.bin` files and VIA definition directly from the **[Latest Release](https://github.com/qpneruy/AttackShark-M87-QMK/releases/latest)**.
 ### 1. Put the Keyboard into Bootloader Mode
 
-The Sonix SN32F248B can be put into Bootloader mode by shorting the **BOOT** pin to ground (GND) before powering the board.
+If this QMK firmware is already flashed, simply press **`Fn + Esc`** (or hold **`Esc`** while plugging in the USB cable via Bootmagic) to enter Bootloader mode without opening the case.
+
+For a stock keyboard, the Sonix SN32F248B can be put into Bootloader mode by shorting the **BOOT** pin to ground (GND) before powering the board.
 
 The BOOT pin is located at **Pin 3** (see picture below). You will need to short this pin with GND, for example the USB connector housing.
 

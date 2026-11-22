@@ -1,6 +1,9 @@
 EEPROM_ENABLE = yes
 DEFERRED_EXEC_ENABLE = yes
 DEBOUNCE_TYPE = asym_eager_defer_pk
+RGB_MATRIX_CUSTOM_KB = yes
+SPACE_CADET_ENABLE = no
+GRAVE_ESC_ENABLE = no
 SRC += hfd2201kba.c
 SRC += hfd_anim.c
 SRC += ch582f.c

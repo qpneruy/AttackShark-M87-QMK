@@ -39,7 +39,7 @@ typedef enum {
     M87_BT_PRF_3 = 2
 } bt_profile_t;
 
-#define BT_HOLD_TIMEOUT_MS  1000
+#define BT_HOLD_TIMEOUT_MS  2000
 
 typedef struct {
     uint16_t keycode;

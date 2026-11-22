@@ -116,6 +116,19 @@ bool matrix_can_read(void) {
 }
 #endif // SHARED_MATRIX
 
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+#    ifndef M87_ZONE_KEYLIGHT
+#        define M87_ZONE_KEYLIGHT  (1u << 0)
+#    endif
+#    ifndef M87_ZONE_SIDELIGHT
+#        define M87_ZONE_SIDELIGHT (1u << 1)
+#    endif
+#    ifndef M87_ZONE_LIGHTBAR
+#        define M87_ZONE_LIGHTBAR  (1u << 2)
+#    endif
+extern volatile uint8_t m87_led_zone_mask;
+#endif
+
 static void rgb_callback(PWMDriver *pwmp);
 
 #if !defined(SN32F2)
@@ -161,7 +174,7 @@ static void rgb_ch_ctrl(PWMConfig *cfg) {
         cfg->channels[ch_idx].mode    = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
 #    endif // SN32F2XX_PWM_CONTROL
     }
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
     cfg->channels[22].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
     cfg->channels[22].pfpamsk = 0; // B6 (Left) is PA
     cfg->channels[1].mode = SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL;
@@ -340,14 +353,23 @@ static void shared_matrix_scan_keys(matrix_row_t current_matrix[], uint8_t curre
 #if (SN32F2XX_PWM_DIRECTION == COL2ROW)
 
 static void shared_matrix_rgb_disable_output(void) {
+#    if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+    chSysLockFromISR();
     // Disable PWM outputs on column pins
     for (uint8_t y = 0; y < SN32F2XX_RGB_MATRIX_COLS; y++) {
-#    if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
-        pwmDisableChannel(&PWMD1, chan_col_order[y]);
-#    elif (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
-        gpio_set_pin_input(led_col_pins[y]);
-#    endif // SN32F2XX_PWM_CONTROL
+        pwmDisableChannelI(&PWMD1, chan_col_order[y]);
     }
+#        if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+    pwmDisableChannelI(&PWMD1, 22);
+    pwmDisableChannelI(&PWMD1, 1);
+    pwmDisableChannelI(&PWMD1, 3);
+#        endif
+    chSysUnlockFromISR();
+#    elif (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
+    for (uint8_t y = 0; y < SN32F2XX_RGB_MATRIX_COLS; y++) {
+        gpio_set_pin_input(led_col_pins[y]);
+    }
+#    endif // SN32F2XX_PWM_CONTROL
     // Disable LED outputs on RGB channel pins
     for (uint8_t x = 0; x < SN32F2XX_RGB_MATRIX_ROWS_HW; x++) {
 #    if (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_HIGH)
@@ -356,21 +378,13 @@ static void shared_matrix_rgb_disable_output(void) {
         gpio_write_pin_high(led_row_pins[x]);
 #    endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
     }
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-    pwmDisableChannel(&PWMD1, 22);
-    pwmDisableChannel(&PWMD1, 1);
-    pwmDisableChannel(&PWMD1, 3);
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
     // Atomic single-cycle Port 1 HIGH cho B6 (P1.6), B9 (P1.9), B11 (P1.11)
     SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
 #endif
 }
 
 static void update_pwm_channels(PWMDriver *pwmp) {
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-    extern bool sidelight_enabled;
-    extern bool lightbar_enabled;
-    extern bool keylight_enabled;
-#endif
     if (++current_row >= SN32F2XX_RGB_MATRIX_ROWS_HW) {
         current_row = 0;
     }
@@ -393,7 +407,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         current_key_row = 0;
     }
 
-    // Disable LED output before scanning the key matrix
+    // Disable LED output before scanning the key matrix (kept unlocked for ATOMIC_BLOCK_FORCEON and USB IRQ preemption)
     if (current_key_row < ROWS_PER_HAND) {
         shared_matrix_rgb_disable_output();
 #    if defined(SHARED_MATRIX)
@@ -401,43 +415,59 @@ static void update_pwm_channels(PWMDriver *pwmp) {
 #    endif // SHARED_MATRIX
     }
 
-    bool enable_pwm_output = false;
-    const uint8_t *row_map = g_led_config.matrix_co[current_key_row];
+    bool           enable_pwm_output = false;
+    const uint8_t *row_map           = g_led_config.matrix_co[current_key_row];
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+    uint8_t zones        = m87_led_zone_mask;
+    bool    keylight_en  = (zones & M87_ZONE_KEYLIGHT) != 0;
+    bool    sidelight_en = (zones & M87_ZONE_SIDELIGHT) != 0;
+    bool    lightbar_en  = (zones & M87_ZONE_LIGHTBAR) != 0;
+#endif
 
+#if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+    chSysLockFromISR();
+#endif
     for (uint8_t current_key_col = 0; current_key_col < SN32F2XX_RGB_MATRIX_COLS; current_key_col++) {
         uint8_t led_index = row_map[current_key_col];
         if (led_index >= SN32F2XX_LED_COUNT) {
 #if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
-            pwmEnableChannel(pwmp, chan_col_order[current_key_col], 0);
+            pwmEnableChannelI(pwmp, chan_col_order[current_key_col], 0);
 #endif
         } else {
-            RGB led = led_state[led_index];
-            if ((led.r | led.g | led.b) != 0) {
+            RGB  led      = led_state[led_index];
+            bool non_zero = (led.r | led.g | led.b) != 0;
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+            if (keylight_en && non_zero) {
                 enable_pwm_output = true;
             }
+#else
+            if (non_zero) {
+                enable_pwm_output = true;
+            }
+#endif
 
 #if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
             uint8_t duty = 0;
-#    if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-            if (keylight_enabled)
+#    if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+            if (keylight_en)
 #    endif
             {
                 duty = (row_ch == 0) ? led.b : ((row_ch == 1) ? led.g : led.r);
             }
-            pwmEnableChannel(pwmp, chan_col_order[current_key_col], duty);
+            pwmEnableChannelI(pwmp, chan_col_order[current_key_col], duty);
 #elif (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
             led_duty_cycle[current_key_col] = (row_ch == 0) ? led.r : ((row_ch == 1) ? led.b : led.g);
 #endif
         }
     }
 
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-    if (sidelight_enabled) {
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+    if (sidelight_en) {
         // 1. Left strip (B6 - Channel 22): Col 0, Red & Green swapped
         uint8_t left_idx = row_map[0];
         if (left_idx >= SN32F2XX_LED_COUNT) left_idx = 0;
         RGB l_led = led_state[left_idx];
-        pwmEnableChannel(pwmp, 22, (row_ch == 0) ? l_led.b : ((row_ch == 1) ? l_led.r : l_led.g));
+        pwmEnableChannelI(pwmp, 22, (row_ch == 0) ? l_led.b : ((row_ch == 1) ? l_led.r : l_led.g));
 
         // 2. Right strip (B9 - Channel 1): Col 16, Red & Green swapped
         uint8_t right_idx = row_map[16];
@@ -445,36 +475,42 @@ static void update_pwm_channels(PWMDriver *pwmp) {
             right_idx = 0;
         }
         RGB r_led = led_state[right_idx];
-        pwmEnableChannel(pwmp, 1, (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g));
+        pwmEnableChannelI(pwmp, 1, (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g));
+
+        if (((l_led.r | l_led.g | l_led.b) | (r_led.r | r_led.g | r_led.b)) != 0) {
+            enable_pwm_output = true;
+        }
     } else {
-        pwmDisableChannel(pwmp, 22);
-        pwmDisableChannel(pwmp, 1);
+        pwmDisableChannelI(pwmp, 22);
+        pwmDisableChannelI(pwmp, 1);
         SN_GPIO1->BSET = (1u << 6) | (1u << 9);
     }
 
     // 3. Logo strip (B11 - Channel 3): Normal RGB
-    if (lightbar_enabled) {
+    if (lightbar_en) {
         uint8_t logo_idx = (current_key_row <= 1) ? g_led_config.matrix_co[3][14] :
                            ((current_key_row <= 3) ? g_led_config.matrix_co[3][15] : g_led_config.matrix_co[3][16]);
         if (logo_idx < SN32F2XX_LED_COUNT) {
             RGB lg_led = led_state[logo_idx];
-            pwmEnableChannel(pwmp, 3, (row_ch == 0) ? lg_led.b : ((row_ch == 1) ? lg_led.g : lg_led.r));
+            pwmEnableChannelI(pwmp, 3, (row_ch == 0) ? lg_led.b : ((row_ch == 1) ? lg_led.g : lg_led.r));
+            if ((lg_led.r | lg_led.g | lg_led.b) != 0) {
+                enable_pwm_output = true;
+            }
         } else {
-            pwmDisableChannel(pwmp, 3);
+            pwmDisableChannelI(pwmp, 3);
             SN_GPIO1->BSET = (1u << 11);
         }
     } else {
-        pwmDisableChannel(pwmp, 3);
+        pwmDisableChannelI(pwmp, 3);
         SN_GPIO1->BSET = (1u << 11);
     }
 #endif
+#if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+    chSysUnlockFromISR();
+#endif
 
     // Enable RGB output
-    if (enable_pwm_output
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
-        || sidelight_enabled || lightbar_enabled
-#endif
-    ) {
+    if (enable_pwm_output) {
 #    if (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_HIGH)
         gpio_write_pin_high(led_row_pins[current_row]);
 #    elif (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_LOW)
@@ -499,10 +535,14 @@ static void shared_matrix_rgb_disable_output(void) {
     }
 #    if (DIODE_DIRECTION != SN32F2XX_PWM_DIRECTION)
     // Disable PWM outputs on row pins
-    for (uint8_t x = 0; x < SN32F2XX_RGB_MATRIX_ROWS_HW; x++) {
 #        if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
-        pwmDisableChannel(&PWMD1, chan_row_order[x]);
+    chSysLockFromISR();
+    for (uint8_t x = 0; x < SN32F2XX_RGB_MATRIX_ROWS_HW; x++) {
+        pwmDisableChannelI(&PWMD1, chan_row_order[x]);
+    }
+    chSysUnlockFromISR();
 #        endif // SN32F2XX_PWM_CONTROL
+    for (uint8_t x = 0; x < SN32F2XX_RGB_MATRIX_ROWS_HW; x++) {
 #        if (SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL == SN32F2XX_PWM_OUTPUT_ACTIVE_HIGH)
         gpio_write_pin_low(led_row_pins[x]);
 #        elif (SN32F2XX_PWM_OUTPUT_ACTIVE_LEVEL == SN32F2XX_PWM_OUTPUT_ACTIVE_LOW)
@@ -531,6 +571,9 @@ static void update_pwm_channels(PWMDriver *pwmp) {
     }
 
     bool enable_pwm_output = false;
+#    if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+    chSysLockFromISR();
+#    endif
     for (uint8_t current_key_row = 0; current_key_row < MATRIX_ROWS; current_key_row++) {
         uint8_t led_index = g_led_config.matrix_co[current_key_row][current_key_col];
 #    if (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
@@ -547,6 +590,7 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         pwmEnableChannelI(pwmp, chan_row_order[(led_row_id + 1)], led_state[led_index].b);
         pwmEnableChannelI(pwmp, chan_row_order[(led_row_id + 2)], led_state[led_index].g);
     }
+    chSysUnlockFromISR();
     // Enable RGB output
     if (enable_pwm_output) {
         gpio_set_pin_output_push_pull(led_col_pins[last_key_col]);
@@ -576,7 +620,9 @@ static void update_pwm_channels(PWMDriver *pwmp) {
 
 static void rgb_callback(PWMDriver *pwmp) {
     // Disable the interrupt
-    pwmDisablePeriodicNotification(pwmp);
+    chSysLockFromISR();
+    pwmDisablePeriodicNotificationI(pwmp);
+    chSysUnlockFromISR();
 #if ((SN32F2XX_PWM_CONTROL == SOFTWARE_PWM) && (SN32F2XX_PWM_DIRECTION == COL2ROW))
     for (uint8_t pwm_cnt = 0; pwm_cnt < (SN32F2XX_RGB_MATRIX_COLS * RGB_MATRIX_HUE_STEP); pwm_cnt++) {
         uint8_t pwm_index = (pwm_cnt % SN32F2XX_RGB_MATRIX_COLS);
@@ -632,7 +678,7 @@ void sn32f2xx_init(void) {
         gpio_write_pin_high(led_row_pins[x]);
 #endif // SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL
     }
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR) || defined(XINMENG_M87_STRIP_MIRROR)
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
     // Drive high before output enable to suppress power-on glitch
     SN_GPIO1->BSET = (1u << 6) | (1u << 9) | (1u << 11);
     gpio_set_pin_output_push_pull(B6);

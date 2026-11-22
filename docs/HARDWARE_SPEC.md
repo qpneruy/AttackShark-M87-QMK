@@ -148,11 +148,11 @@ Input sense pins on Port D (`GPIO3`):
 }
 ```
 
-### 3.3. Underglow Strips & Strip Mirroring (`XINMENG_M87_STRIP_MIRROR`)
+### 3.3. Underglow Strips & Strip Mirroring (`ATTACKSHARK_M87_STRIP_MIRROR`)
 The three auxiliary strips share anode power lines with the main rows, but sink current through dedicated PWM channels:
 * **Pin 40 (`B6` / `P1.6`)**: Left Side Strip (8 LEDs, PWM Channel 22). Mirrored from Column 0 color data (`C12`), with hardware Red/Green channel swap.
-* **Pin 43 (`B9` / `P1.9`)**: Right Side Strip (8 LEDs, PWM Channel 1). Mirrored from Column 16 color data (`B12`), with hardware Red/Green channel swap.
-* **Pin 45 (`B11` / `P1.11`)**: Front Logo Lightbar (6 LEDs, PWM Channel 3). Mirrored from Column 8 color data (`C4`).
+* **Pin 43 (`B9` / `P1.9`)**: Right Side Strip (8 LEDs, PWM Channel 1). Mirrored from Column 16 color data (`B12`, including virtual LEDs `[3, 16]` and `[4, 16]`), with hardware Red/Green channel swap.
+* **Pin 45 (`B11` / `P1.11`)**: Front Logo Lightbar (6 LEDs, PWM Channel 3). Mapped across virtual matrix LEDs `[3, 14]` (rows 0–1), `[3, 15]` (rows 2–3), and `[3, 16]` (rows 4–5).
 
 ---
 
@@ -170,11 +170,12 @@ The three auxiliary strips share anode power lines with the main rows, but sink 
   * **Bluetooth Profile 1 (`Fn + 1`)**: Solid Blue (`R: 0, G: 0, B: 255`).
   * **Bluetooth Profile 2 (`Fn + 2`)**: Solid Cyan (`R: 0, G: 255, B: 255`).
   * **Bluetooth Profile 3 (`Fn + 3`)**: Solid Magenta (`R: 255, G: 0, B: 255`).
+  * **2.4GHz RF Mode**: Solid Green (`R: 0, G: 255, B: 0`).
 * **Behavior**:
   * **Searching / Reconnecting**: Slow blink (512ms period) for up to 5 seconds, then turns off to conserve power.
-  * **Pairing Mode** (holding `Fn + 1/2/3` for 3 seconds): Fast blink (256ms period) for up to 60 seconds.
-  * **Connected**: Displays solid profile color for 2 seconds, then turns completely off to prevent distraction.
-  * **2.4GHz / Wired USB Mode**: Remains completely off.
+  * **Pairing Mode** (holding `Fn + 1/2/3` for 2 seconds): Fast blink (256ms period) for up to 150 seconds.
+  * **Connected**: Displays solid profile/mode color for 2 seconds, then turns completely off to prevent distraction.
+  * **Wired USB Mode**: Remains completely off.
 
 ---
 
@@ -192,17 +193,12 @@ Communication between the main keyboard controller and the WCH CH582F wireless c
 ```
 
 ### 5.1. Hardware Initialization
-1. **Peripheral Function Pin Assignment (PFPA)**:
-   ```c
-   *(volatile uint32_t *)0x40042000 = 0x009FFFBA;
-   ```
-   Reroutes internal UART2 peripherals to physical pads Pin 17 (`P0.0`) and Pin 18 (`P0.1`).
-2. **SWD Pin Protection**:
+1. **SWD Pin Protection**:
    ```c
    SN_SYS0->SWDCTRL |= 1;
    ```
-   Frees debug pins to prevent conflict with normal GPIO.
-3. **UART2 Clock & Baud Rate Setup**:
+   Frees `P0.0` (`URXD2`) and `P0.1` (`UTXD2`) from SWD debug functions so fixed UART2 pins operate normally (note: `0x40042000` on SN32F240B is `SN_PFPA->CT16B1`, managed by the PWM driver).
+2. **UART2 Clock & Baud Rate Setup**:
    ```c
    SN_SYS1->AHBCLKEN |= (1 << 18);
    SN_GPIO0->BSET = 3u;
