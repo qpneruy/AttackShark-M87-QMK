@@ -6,6 +6,13 @@
 #include "ch582f_protocol.h"
 #include "wait.h"
 
+#define UART_LS_RDR  (1u << 0)
+#define UART_LS_THRE (1u << 5)
+#define UART_LS_TEMT (1u << 6)
+
+static uint8_t rx_buf[3];
+static uint8_t rx_idx = 0;
+
 static bool is_rx_header(uint8_t b);
 static bool uart2_read_byte_fast(uint8_t *b);
 
@@ -36,13 +43,26 @@ void uart2_write_buf_fast(const uint8_t *data, const uint8_t len) {
 
 void uart2_write_byte_fast(const uint8_t b) {
     uint32_t uart_timeout = 50000;
-    while (!(SN_UART2->LS & (1 << 5)) && --uart_timeout) {
+    while (!(SN_UART2->LS & UART_LS_THRE) && --uart_timeout) {
     }
     SN_UART2->TH = b;
 }
 
+// Blocks (bounded) until the last stop bit has left the shifter.
+void uart2_wait_tx_idle(void) {
+    uint32_t uart_timeout = 50000;
+    while (!(SN_UART2->LS & UART_LS_TEMT) && --uart_timeout) {
+    }
+}
+
+// Drops RX FIFO contents and any partially parsed frame.
+void uart2_flush_rx(void) {
+    SN_UART2->FIFOCTRL = 0x07;
+    rx_idx             = 0;
+}
+
 static bool uart2_read_byte_fast(uint8_t *b) {
-    if (SN_UART2->LS & 1) {
+    if (SN_UART2->LS & UART_LS_RDR) {
         *b = (uint8_t)(SN_UART2->RB & 0xFF);
         return true;
     }
@@ -50,9 +70,7 @@ static bool uart2_read_byte_fast(uint8_t *b) {
 }
 
 bool uart2_poll_packet(uint8_t *header, uint8_t *param, bool *is_ack) {
-    static uint8_t rx_buf[3];
-    static uint8_t rx_idx = 0;
-    uint8_t        b;
+    uint8_t b;
 
     while (uart2_read_byte_fast(&b)) {
         if (rx_idx == 0) {

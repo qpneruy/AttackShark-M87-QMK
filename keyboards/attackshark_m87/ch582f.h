@@ -61,4 +61,10 @@ bool           ch582f_is_connected(void);
 uint32_t       ch582f_get_connected_time(void);
 uint8_t        ch582f_get_battery_level(void);
 void           ch582f_poll_battery(void);
+bool           ch582f_is_low_battery(void);
+bool           ch582f_is_charging(void);
+
+// Call with 48MHz + UART2 running: before MCU sleep / right after clocks are restored.
+void           ch582f_prepare_sleep(void);
+void           ch582f_on_wakeup(void);
 #endif // ATTACKSHARK_M87_QMK_CH582F_H
