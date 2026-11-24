@@ -15,6 +15,10 @@ bool    hfd_anim_process_record(uint16_t keycode, keyrecord_t *record);
 bool    hfd_anim_render(uint8_t led_min, uint8_t led_max, uint32_t now);
 bool    hfd_anim_is_running(void);
 void    hfd_anim_flush_before_save(void);
+#if defined(RGB_MATRIX_ENABLE) && defined(RGB_MATRIX_KEYREACTIVE_ENABLED)
+uint8_t hfd_anim_get_reactive_delta(uint8_t led_index);
+void    hfd_anim_reset_reactive_prism(void);
+#endif
 
 bool    m87_get_wireless_eco(void);
 void    m87_set_wireless_eco(bool enable);

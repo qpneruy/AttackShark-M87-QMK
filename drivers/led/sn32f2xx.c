@@ -72,7 +72,9 @@
 static uint8_t chan_col_order[SN32F2XX_RGB_MATRIX_COLS] = {0}; // track the channel col order
 static uint8_t current_row                              = 0;   // LED row scan counter
 static uint8_t current_key_row                          = 0;   // key row scan counter
-#    if (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
+#    if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+static bool prev_enable_pwm_output                      = false;
+#    elif (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
 static uint8_t led_duty_cycle[SN32F2XX_RGB_MATRIX_COLS] = {0}; // track the channel duty cycle
 #    endif
 #elif (SN32F2XX_PWM_DIRECTION == ROW2COL)
@@ -127,6 +129,16 @@ bool matrix_can_read(void) {
 #        define M87_ZONE_LIGHTBAR  (1u << 2)
 #    endif
 extern volatile uint8_t m87_led_zone_mask;
+
+#    define SN32F2XX_LED_MASK_BYTES ((SN32F2XX_LED_COUNT + 7) / 8)
+static uint8_t indicator_mask[SN32F2XX_LED_MASK_BYTES];
+static uint8_t indicator_mask_buf[SN32F2XX_LED_MASK_BYTES];
+
+void sn32f2xx_mark_indicator_led(uint8_t index) {
+    if (index < SN32F2XX_LED_COUNT) {
+        indicator_mask_buf[index >> 3] |= (uint8_t)(1u << (index & 7u));
+    }
+}
 #endif
 
 static void rgb_callback(PWMDriver *pwmp);
@@ -434,28 +446,36 @@ static void update_pwm_channels(PWMDriver *pwmp) {
             pwmEnableChannelI(pwmp, chan_col_order[current_key_col], 0);
 #endif
         } else {
-            RGB  led      = led_state[led_index];
-            bool non_zero = (led.r | led.g | led.b) != 0;
-#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
-            if (keylight_en && non_zero) {
-                enable_pwm_output = true;
-            }
-#else
-            if (non_zero) {
-                enable_pwm_output = true;
-            }
-#endif
-
+            RGB led = led_state[led_index];
 #if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
             uint8_t duty = 0;
 #    if defined(ATTACKSHARK_M87_STRIP_MIRROR)
-            if (keylight_en)
+            bool led_en = keylight_en ||
+                          ((g_led_config.flags[led_index] & LED_FLAG_INDICATOR) != 0) ||
+                          ((indicator_mask[led_index >> 3] & (1u << (led_index & 7u))) != 0);
+            if (led_en)
 #    endif
             {
                 duty = (row_ch == 0) ? led.b : ((row_ch == 1) ? led.g : led.r);
             }
+            if (duty != 0) {
+                enable_pwm_output = true;
+            }
             pwmEnableChannelI(pwmp, chan_col_order[current_key_col], duty);
 #elif (SN32F2XX_PWM_CONTROL == SOFTWARE_PWM)
+            bool non_zero = (led.r | led.g | led.b) != 0;
+#    if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+            bool led_en = keylight_en ||
+                          ((g_led_config.flags[led_index] & LED_FLAG_INDICATOR) != 0) ||
+                          ((indicator_mask[led_index >> 3] & (1u << (led_index & 7u))) != 0);
+            if (led_en && non_zero) {
+                enable_pwm_output = true;
+            }
+#    else
+            if (non_zero) {
+                enable_pwm_output = true;
+            }
+#    endif
             led_duty_cycle[current_key_col] = (row_ch == 0) ? led.r : ((row_ch == 1) ? led.b : led.g);
 #endif
         }
@@ -466,18 +486,20 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         // 1. Left strip (B6 - Channel 22): Col 0, Red & Green swapped
         uint8_t left_idx = row_map[0];
         if (left_idx >= SN32F2XX_LED_COUNT) left_idx = 0;
-        RGB l_led = led_state[left_idx];
-        pwmEnableChannelI(pwmp, 22, (row_ch == 0) ? l_led.b : ((row_ch == 1) ? l_led.r : l_led.g));
+        RGB     l_led  = led_state[left_idx];
+        uint8_t l_duty = (row_ch == 0) ? l_led.b : ((row_ch == 1) ? l_led.r : l_led.g);
+        pwmEnableChannelI(pwmp, 22, l_duty);
 
         // 2. Right strip (B9 - Channel 1): Col 16, Red & Green swapped
         uint8_t right_idx = row_map[16];
         if (right_idx >= SN32F2XX_LED_COUNT) {
             right_idx = 0;
         }
-        RGB r_led = led_state[right_idx];
-        pwmEnableChannelI(pwmp, 1, (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g));
+        RGB     r_led  = led_state[right_idx];
+        uint8_t r_duty = (row_ch == 0) ? r_led.b : ((row_ch == 1) ? r_led.r : r_led.g);
+        pwmEnableChannelI(pwmp, 1, r_duty);
 
-        if (((l_led.r | l_led.g | l_led.b) | (r_led.r | r_led.g | r_led.b)) != 0) {
+        if ((l_duty | r_duty) != 0) {
             enable_pwm_output = true;
         }
     } else {
@@ -491,9 +513,10 @@ static void update_pwm_channels(PWMDriver *pwmp) {
         uint8_t logo_idx = (current_key_row <= 1) ? g_led_config.matrix_co[3][14] :
                            ((current_key_row <= 3) ? g_led_config.matrix_co[3][15] : g_led_config.matrix_co[3][16]);
         if (logo_idx < SN32F2XX_LED_COUNT) {
-            RGB lg_led = led_state[logo_idx];
-            pwmEnableChannelI(pwmp, 3, (row_ch == 0) ? lg_led.b : ((row_ch == 1) ? lg_led.g : lg_led.r));
-            if ((lg_led.r | lg_led.g | lg_led.b) != 0) {
+            RGB     lg_led  = led_state[logo_idx];
+            uint8_t lg_duty = (row_ch == 0) ? lg_led.b : ((row_ch == 1) ? lg_led.g : lg_led.r);
+            pwmEnableChannelI(pwmp, 3, lg_duty);
+            if (lg_duty != 0) {
                 enable_pwm_output = true;
             }
         } else {
@@ -510,7 +533,13 @@ static void update_pwm_channels(PWMDriver *pwmp) {
 #endif
 
     // Enable RGB output
-    if (enable_pwm_output) {
+#if (SN32F2XX_PWM_CONTROL == HARDWARE_PWM)
+    bool drive_row         = prev_enable_pwm_output;
+    prev_enable_pwm_output = enable_pwm_output;
+#else
+    bool drive_row         = enable_pwm_output;
+#endif
+    if (drive_row) {
 #    if (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_HIGH)
         gpio_write_pin_high(led_row_pins[current_row]);
 #    elif (SN32F2XX_RGB_OUTPUT_ACTIVE_LEVEL == SN32F2XX_RGB_OUTPUT_ACTIVE_LOW)
@@ -705,10 +734,21 @@ void sn32f2xx_init(void) {
 }
 
 void sn32f2xx_flush(void) {
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+    for (uint8_t i = 0; i < SN32F2XX_LED_MASK_BYTES; i++) {
+        indicator_mask[i] &= indicator_mask_buf[i];
+    }
+    __asm__ volatile("" ::: "memory");
+#endif
     if (led_state_buf_update_required) {
         memcpy(led_state, led_state_buf, sizeof(RGB) * SN32F2XX_LED_COUNT);
         led_state_buf_update_required = false;
     }
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+    __asm__ volatile("" ::: "memory");
+    memcpy(indicator_mask, indicator_mask_buf, sizeof(indicator_mask));
+    memset(indicator_mask_buf, 0, sizeof(indicator_mask_buf));
+#endif
 }
 
 void sn32f2xx_set_color(int index, uint8_t r, uint8_t g, uint8_t b) {
