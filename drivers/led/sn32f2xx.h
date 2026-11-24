@@ -78,3 +78,6 @@ void sn32f2xx_init(void);
 void sn32f2xx_flush(void);
 void sn32f2xx_set_color(int index, uint8_t r, uint8_t g, uint8_t b);
 void sn32f2xx_set_color_all(uint8_t r, uint8_t g, uint8_t b);
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+void sn32f2xx_mark_indicator_led(uint8_t index);
+#endif

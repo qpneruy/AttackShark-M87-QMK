@@ -14,8 +14,8 @@ A streamlined, standalone firmware repository for the **Attack Shark M87** (Xinm
 
 * **Tri-Mode Connectivity**: Full **NKRO** across Wired USB (native **1000Hz / 1ms** polling), 2.4GHz RF, and Bluetooth 5.3 (3 profiles), plus System Power/Sleep/Wake keys over wireless.
 * **VIA v3 Support**: Live key remapping, macros, RGB effects, and custom **M87 Settings** directly via [usevia.app](https://usevia.app).
-* **Multi-Zone RGB Lighting**: 24 RGB effects (18 built-in + 6 custom), smooth in-RAM tuning, and independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
-* **Wireless Power Management**: Hardware `SN_PMU` Deep-Sleep with instant keypress/VBUS/switch wakeup, USB VBUS charging detection, 25s disconnected sleep timeout, configurable 1–10 min connected timeout (5-min default in VIA), CH582F low-battery alert, and 10-level battery indicator (`Fn + Alt`).
+* **Multi-Zone RGB Lighting**: 25 RGB effects (18 built-in + 7 custom, including Reactive Prism), smooth in-RAM tuning, and independent controls for the 87-key backlight, dual side strips, and front logo lightbar, with explicit EEPROM save (`Fn + /`).
+* **Wireless Power Management**: Hardware `SN_PMU` Deep-Sleep with instant keypress/VBUS/switch wakeup, USB VBUS charging detection, 25s disconnected sleep timeout, configurable 1–10 min connected timeout (5-min default in VIA), CH582F low-battery alert & `<30%` warning indicator, periodic active battery polling, and 10-level battery indicator (`Fn + Alt`).
 
 ---
 

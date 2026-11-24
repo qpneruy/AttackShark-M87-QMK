@@ -9,6 +9,9 @@ RGB_MATRIX_EFFECT(AURORA_BOREALIS)
 RGB_MATRIX_EFFECT(PLASMA_LAVA)
 RGB_MATRIX_EFFECT(EMBER_FIRE)
 RGB_MATRIX_EFFECT(METEOR_SHOWER)
+#ifdef RGB_MATRIX_KEYREACTIVE_ENABLED
+RGB_MATRIX_EFFECT(REACTIVE_PRISM)
+#endif
 
 #ifdef RGB_MATRIX_CUSTOM_EFFECT_IMPLS
 
@@ -205,5 +208,55 @@ bool METEOR_SHOWER(effect_params_t *params) {
     s_t2             = (uint8_t)((g_rgb_timer * (uint32_t)((spd >> 2) + 2u)) >> 8);
     return effect_runner_i(params, &METEOR_SHOWER_math);
 }
+
+#ifdef RGB_MATRIX_KEYREACTIVE_ENABLED
+extern uint8_t hfd_anim_get_reactive_delta(uint8_t led_index);
+extern void    hfd_anim_reset_reactive_prism(void);
+
+// ============================================================================
+// 7. REACTIVE PRISM (+2 hue step per press + perceptual hue equalization)
+// ============================================================================
+bool REACTIVE_PRISM(effect_params_t *params) {
+    if (params->init && params->iter == 0) {
+        hfd_anim_reset_reactive_prism();
+    }
+
+    RGB_MATRIX_USE_LIMITS(led_min, led_max);
+
+    uint8_t  spd      = qadd8(rgb_matrix_config.speed, 1);
+    uint16_t max_tick = 65535u / spd;
+    for (uint8_t i = led_min; i < led_max; i++) {
+        RGB_MATRIX_TEST_LED_FLAGS();
+        uint16_t tick = max_tick;
+        for (int8_t j = g_last_hit_tracker.count - 1; j >= 0; j--) {
+            if (g_last_hit_tracker.index[j] == i && g_last_hit_tracker.tick[j] < tick) {
+                tick = g_last_hit_tracker.tick[j];
+                break;
+            }
+        }
+
+        if (tick >= max_tick) {
+            rgb_matrix_set_color(i, 0, 0, 0);
+            continue;
+        }
+
+        uint16_t offset = scale16by8(tick, spd);
+        if (offset >= 255u) {
+            rgb_matrix_set_color(i, 0, 0, 0);
+            continue;
+        }
+
+        hsv_t   hsv   = rgb_matrix_config.hsv;
+        uint8_t raw_h = (uint8_t)(hsv.h + hfd_anim_get_reactive_delta(i));
+        int8_t  warp  = (int8_t)(((int16_t)sin8((uint8_t)(raw_h * 3u)) - 128) / 16);
+        hsv.h         = (uint8_t)(raw_h + (uint8_t)warp);
+        hsv.v         = scale8((uint8_t)(255u - offset), hsv.v);
+
+        rgb_t rgb = rgb_matrix_hsv_to_rgb(hsv);
+        rgb_matrix_set_color(i, rgb.r, rgb.g, rgb.b);
+    }
+    return rgb_matrix_check_finished_leds(led_max);
+}
+#endif // RGB_MATRIX_KEYREACTIVE_ENABLED
 
 #endif // RGB_MATRIX_CUSTOM_EFFECT_IMPLS

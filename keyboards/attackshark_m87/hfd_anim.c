@@ -1,10 +1,13 @@
 // Copyright 2026 HuuTinh (@qpneruy)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "hfd_anim.h"
 #include "quantum.h"
+#include "hfd_anim.h"
 #include "hfd2201kba.h"
 #include "ch582f.h"
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+#    include "sn32f2xx.h"
+#endif
 
 // ==========================================================================
 // 0. FEATURE FLAGS NORMALIZATION
@@ -23,6 +26,7 @@
 #define WIRELESS_DISCONNECTED_ECO_MS 25000u
 #define WIRELESS_DISCONNECT_BLINK_MS 6000u
 #define RGB_MODE_COOLDOWN_MS         260
+#define BATTERY_POLL_INTERVAL_MS     300000u
 
 extern void last_matrix_activity_trigger(void);
 
@@ -61,8 +65,17 @@ static bool           wireless_eco_enabled    = true;
 static uint8_t        wireless_eco_mins       = WIRELESS_ECO_DEFAULT_MINS;
 static bool           battery_show_active     = false;
 static bool           was_charging            = false;
+static bool           was_connected           = false;
+static uint32_t       last_batt_poll_time     = 0;
 static deferred_token battery_hide_token      = INVALID_DEFERRED_TOKEN;
 static uint32_t       rgb_mode_cooldown_timer = 0;
+
+#if defined(RGB_MATRIX_ENABLE) && defined(RGB_MATRIX_KEYREACTIVE_ENABLED)
+static uint8_t        reactive_delta          = 0;
+static uint8_t        reactive_ring_idx       = 0;
+static uint8_t        reactive_ring_led[LED_HITS_TO_REMEMBER];
+static uint8_t        reactive_ring_delta[LED_HITS_TO_REMEMBER];
+#endif
 
 #if defined(M87_WAVE_F8_ENABLE)
 static uint32_t       wave_start_time         = 0;
@@ -95,6 +108,7 @@ static uint8_t  step_toward_u8(uint8_t cur, uint8_t target, uint8_t step);
 
 #if defined(RGB_MATRIX_ENABLE)
 static void     render_battery_indicator(uint8_t led_min, uint8_t led_max);
+static void     render_battery_warn(uint8_t led_min, uint8_t led_max, uint32_t now, bool critical, bool low_batt);
 static void     render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now, bool low_batt, bool eco_sleep);
 #endif
 
@@ -175,7 +189,12 @@ bool m87_wireless_eco_active(void) {
 }
 
 void hfd_anim_init(void) {
-    was_charging = ch582f_is_charging();
+    was_charging        = ch582f_is_charging();
+    was_connected       = ch582f_is_connected();
+    last_batt_poll_time = timer_read32();
+#if defined(RGB_MATRIX_ENABLE) && defined(RGB_MATRIX_KEYREACTIVE_ENABLED)
+    hfd_anim_reset_reactive_prism();
+#endif
 #if defined(M87_RGB_INERTIA_ENABLE)
     rgb_inertia_sync();
 #endif
@@ -185,11 +204,24 @@ void hfd_anim_init(void) {
 }
 
 void hfd_anim_task(void) {
-    bool is_charging = ch582f_is_charging();
-    if (was_charging && !is_charging && ch582f_get_mode() != M87_WIRED_MODE) {
-        last_matrix_activity_trigger();
+    bool is_charging  = ch582f_is_charging();
+    bool is_connected = ch582f_is_connected();
+    if (ch582f_get_mode() != M87_WIRED_MODE) {
+        if (was_charging && !is_charging) {
+            last_matrix_activity_trigger();
+            ch582f_poll_battery();
+            last_batt_poll_time = timer_read32();
+        } else if (!was_connected && is_connected) {
+            ch582f_poll_battery();
+            last_batt_poll_time = timer_read32();
+        } else if (is_connected && last_input_activity_elapsed() < 1000u &&
+                   timer_elapsed32(last_batt_poll_time) >= BATTERY_POLL_INTERVAL_MS) {
+            ch582f_poll_battery();
+            last_batt_poll_time = timer_read32();
+        }
     }
-    was_charging = is_charging;
+    was_charging  = is_charging;
+    was_connected = is_connected;
 
 #if defined(M87_WAVE_F8_ENABLE)
     if (wave_active && timer_elapsed32(wave_start_time) >= WAVE_DURATION_TOTAL) {
@@ -222,6 +254,19 @@ bool hfd_anim_process_record(uint16_t keycode, keyrecord_t *record) {
             }
             break;
         default:
+#if defined(RGB_MATRIX_ENABLE) && defined(RGB_MATRIX_KEYREACTIVE_ENABLED)
+            if (record->event.pressed && rgb_matrix_config.mode == RGB_MATRIX_CUSTOM_REACTIVE_PRISM) {
+                uint8_t led = g_led_config.matrix_co[record->event.key.row][record->event.key.col];
+                if (led < RGB_MATRIX_LED_COUNT) {
+                    reactive_delta                        += 2u;
+                    reactive_ring_led[reactive_ring_idx]   = led;
+                    reactive_ring_delta[reactive_ring_idx] = reactive_delta;
+                    if (++reactive_ring_idx >= LED_HITS_TO_REMEMBER) {
+                        reactive_ring_idx = 0;
+                    }
+                }
+            }
+#endif
             return true;
     }
 
@@ -230,6 +275,7 @@ bool hfd_anim_process_record(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case BATTERY_LEVEL:
             ch582f_poll_battery();
+            last_batt_poll_time = timer_read32();
             battery_show_active = true;
             if (!extend_deferred_exec(battery_hide_token, 3000)) {
                 battery_hide_token = defer_exec(3000, battery_hide_callback, NULL);
@@ -349,11 +395,14 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
         return false;
     }
 
-    uint32_t now       = timer_read32();
-    bool     eco_sleep = m87_wireless_eco_active();
-    bool     low_batt  = (ch582f_get_mode() != M87_WIRED_MODE) &&
-                         !ch582f_is_charging() &&
-                         ch582f_is_low_battery();
+    uint32_t now                = timer_read32();
+    bool     eco_sleep          = m87_wireless_eco_active();
+    bool     unplugged_wireless = (ch582f_get_mode() != M87_WIRED_MODE) && !ch582f_is_charging();
+    uint8_t  batt_pct           = ch582f_get_battery_level();
+    bool     low_batt           = unplugged_wireless && ch582f_is_low_battery();
+    bool     anim_running       = hfd_anim_is_running();
+    bool     show_batt          = (eco_sleep || low_batt || !anim_running) && battery_show_active;
+    bool     batt_warn          = unplugged_wireless && !eco_sleep && (!anim_running || low_batt) && (batt_pct < 30u || low_batt);
 
     if (eco_sleep || low_batt) {
         for (uint8_t i = led_min; i < led_max; i++) {
@@ -363,16 +412,44 @@ bool rgb_matrix_indicators_advanced_kb(uint8_t led_min, uint8_t led_max) {
         hfd_anim_render(led_min, led_max, now);
     }
 
-    if ((eco_sleep || low_batt || !hfd_anim_is_running()) && battery_show_active) {
+    if (show_batt) {
         render_battery_indicator(led_min, led_max);
+    }
+
+    if (batt_warn) {
+        render_battery_warn(led_min, led_max, now, batt_pct < 15u, low_batt);
     }
 
     render_wireless_indicator(led_min, led_max, now, low_batt, eco_sleep);
 
-    if (low_batt && !eco_sleep && led_min == 0u && led_max > 0u) {
-        rgb_matrix_set_color(0, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
+    if (low_batt && !eco_sleep && M87_LED_ESC >= led_min && M87_LED_ESC < led_max) {
+        rgb_matrix_set_color(M87_LED_ESC, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+        sn32f2xx_mark_indicator_led(M87_LED_ESC);
+#endif
     }
     return true;
+}
+#endif
+
+#if defined(RGB_MATRIX_ENABLE) && defined(RGB_MATRIX_KEYREACTIVE_ENABLED)
+void hfd_anim_reset_reactive_prism(void) {
+    reactive_delta    = 0;
+    reactive_ring_idx = 0;
+    for (uint8_t i = 0; i < LED_HITS_TO_REMEMBER; i++) {
+        reactive_ring_led[i] = NO_LED;
+    }
+}
+
+uint8_t hfd_anim_get_reactive_delta(uint8_t led_index) {
+    uint8_t idx = reactive_ring_idx;
+    for (uint8_t n = 0; n < LED_HITS_TO_REMEMBER; n++) {
+        idx = idx ? (uint8_t)(idx - 1u) : (uint8_t)(LED_HITS_TO_REMEMBER - 1u);
+        if (reactive_ring_led[idx] == led_index) {
+            return reactive_ring_delta[idx];
+        }
+    }
+    return reactive_delta;
 }
 #endif
 
@@ -514,8 +591,8 @@ static bool expand_effect_render(uint8_t led_min, uint8_t led_max, uint32_t now,
 
 #if defined(RGB_MATRIX_ENABLE)
 static void render_battery_indicator(uint8_t led_min, uint8_t led_max) {
-    uint8_t start = (led_min > 17) ? led_min : 17;
-    uint8_t end   = (led_max < 27) ? led_max : 27;
+    uint8_t start = (led_min > M87_LED_BATT_BAR_START) ? led_min : M87_LED_BATT_BAR_START;
+    uint8_t end   = (led_max < M87_LED_BATT_BAR_END) ? led_max : M87_LED_BATT_BAR_END;
     if (start >= end) {
         return;
     }
@@ -530,22 +607,57 @@ static void render_battery_indicator(uint8_t led_min, uint8_t led_max) {
     uint8_t g = (pct <= 20) ? 0   : ((pct <= 50) ? 180 : 255);
 
     for (uint8_t idx = start; idx < end; idx++) {
-        if ((idx - 17) < lit_count) {
+        if ((idx - M87_LED_BATT_BAR_START) < lit_count) {
             rgb_matrix_set_color(idx, r, g, 0);
         } else {
             rgb_matrix_set_color(idx, 0, 0, 0);
         }
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+        sn32f2xx_mark_indicator_led(idx);
+#endif
+    }
+}
+
+static void render_battery_warn(uint8_t led_min, uint8_t led_max, uint32_t now, bool critical, bool low_batt) {
+    uint8_t start = (led_min > M87_LED_BATT_WARN_START) ? led_min : M87_LED_BATT_WARN_START;
+    uint8_t end   = (led_max < M87_LED_BATT_WARN_END) ? led_max : M87_LED_BATT_WARN_END;
+    if (start >= end) {
+        return;
+    }
+
+    uint8_t max_v = rgb_matrix_config.hsv.v;
+    if (max_v < 80u) {
+        max_v = 80u;
+    }
+
+    uint8_t r, g;
+    if (low_batt) {
+        r = ((now >> 9) & 1u) ? max_v : 0u;
+        g = 0u;
+    } else {
+        uint8_t phase  = (uint8_t)(now >> 3);
+        uint8_t tri    = (phase & 0x80u) ? (uint8_t)(255u - ((phase & 0x7Fu) << 1)) : (uint8_t)(phase << 1);
+        uint8_t breath = (uint8_t)(((uint16_t)(55u + (((uint16_t)tri * 200u) >> 8)) * max_v) >> 8);
+        r              = breath;
+        g              = critical ? 0u : (uint8_t)(breath >> 2);
+    }
+
+    for (uint8_t idx = start; idx < end; idx++) {
+        rgb_matrix_set_color(idx, r, g, 0);
+#if defined(ATTACKSHARK_M87_STRIP_MIRROR)
+        sn32f2xx_mark_indicator_led(idx);
+#endif
     }
 }
 
 static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t now, bool low_batt, bool eco_sleep) {
-    if (87 < led_min || 87 >= led_max) {
+    if (M87_LED_MODE < led_min || M87_LED_MODE >= led_max) {
         return;
     }
 
     connect_mode_t cur_mode = ch582f_get_mode();
     if (cur_mode != M87_BT_MODE && cur_mode != M87_24G_MODE) {
-        rgb_matrix_set_color(87, 0, 0, 0);
+        rgb_matrix_set_color(M87_LED_MODE, 0, 0, 0);
         return;
     }
 
@@ -565,7 +677,7 @@ static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t
 
     if (ch582f_is_pairing()) {
         bool on = (now >> 8) & 1;
-        rgb_matrix_set_color(87, on ? r : 0, on ? g : 0, on ? b : 0);
+        rgb_matrix_set_color(M87_LED_MODE, on ? r : 0, on ? g : 0, on ? b : 0);
         return;
     }
 
@@ -573,18 +685,18 @@ static void render_wireless_indicator(uint8_t led_min, uint8_t led_max, uint32_t
     if (!ch582f_is_connected()) {
         if (elapsed < 5000) {
             bool on = (now >> 9) & 1;
-            rgb_matrix_set_color(87, on ? r : 0, on ? g : 0, on ? b : 0);
+            rgb_matrix_set_color(M87_LED_MODE, on ? r : 0, on ? g : 0, on ? b : 0);
             return;
         }
     } else if (elapsed < 2000) {
-        rgb_matrix_set_color(87, r, g, b);
+        rgb_matrix_set_color(M87_LED_MODE, r, g, b);
         return;
     }
 
     if (low_batt && !eco_sleep) {
-        rgb_matrix_set_color(87, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
+        rgb_matrix_set_color(M87_LED_MODE, ((now >> 9) & 1u) ? 255u : 0u, 0, 0);
     } else {
-        rgb_matrix_set_color(87, 0, 0, 0);
+        rgb_matrix_set_color(M87_LED_MODE, 0, 0, 0);
     }
 }
 #endif
